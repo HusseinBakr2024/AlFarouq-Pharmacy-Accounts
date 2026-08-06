@@ -443,7 +443,7 @@ def export_purchases(supplier_id:Optional[int]=None,entry_type:str="all",status:
     if date_to:q=q.filter(PurchaseJournal.journal_date<=parse_date(date_to))
     lines=q.order_by(PurchaseJournal.journal_date,PurchaseLine.id).all(); wb=Workbook(); ws=wb.active; ws.title="تقرير المشتريات"; ws.sheet_view.rightToLeft=True; headers=["اليومية","التاريخ","النوع","المورد","رقم المستند","نوع الإشعار","صيدلي","جمهور","الخصم %","تأثير الحساب","الوصف","الحالة"]; ws.append(headers)
     for c in ws[1]:c.font=Font(bold=True,color="FFFFFF");c.fill=PatternFill("solid",fgColor="7C3AED");c.alignment=Alignment(horizontal="center")
-    for x in lines:ws.append([x.journal.journal_no,x.journal.journal_date.strftime("%d/%m/%Y"),"مشتريات" if x.entry_type=="purchase" else "إشعار",x.supplier.name,x.document_no,x.notice_type,x.pharmacy_value,x.public_value,x.discount_percent,x.account_effect,x.description,"مرحلة" if x.journal.status=="posted" else "غير مرحلة"] )
+    for x in lines:ws.append([x.journal.journal_no,x.journal.journal_date.strftime("%d/%m/%Y"),"فاتورة شراء" if x.entry_type=="purchase" else (x.journal.notice_type or x.notice_type or "إشعار"),x.supplier.name,x.document_no,x.notice_type,x.pharmacy_value,x.public_value,x.discount_percent,x.account_effect,x.description,"مرحلة" if x.journal.status=="posted" else "غير مرحلة"] )
     for i,w in enumerate([18,14,12,24,18,18,14,14,12,16,28,14],1):ws.column_dimensions[get_column_letter(i)].width=w
     out=BytesIO();wb.save(out);out.seek(0);return StreamingResponse(out,media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",headers={"Content-Disposition":"attachment; filename=AlFarouq_Purchases_Report.xlsx"})
 

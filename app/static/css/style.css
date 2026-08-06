@@ -1552,9 +1552,22 @@ body.page-purchases .title-metrics span{
 .purchase-workspace.notice-mode .purchase-grid th:last-child,
 .purchase-workspace.notice-mode .purchase-grid td:last-child{width:52px}
 
-/* Purchases keeps the Sales Journal shell; only the conditional header field differs. */
-.purchase-workspace .journal-notice-type{display:none}
-.purchase-workspace.notice-mode .journal-notice-type{display:block}
+/* Purchases keeps one stable header row and gives البيان the largest detail width. */
+.purchase-workspace .sales-head-controls{grid-template-columns:110px 145px minmax(145px,1fr) minmax(145px,1fr)}
+.purchase-workspace .journal-notice-type{visibility:hidden;pointer-events:none}
+.purchase-workspace.notice-mode .journal-notice-type{visibility:visible;pointer-events:auto}
+.purchase-workspace .purchase-detail-table{width:100%;min-width:900px;table-layout:fixed}
+.purchase-workspace .purchase-detail-table .purchase-index-col{width:4%}
+.purchase-workspace .purchase-detail-table .purchase-supplier-col{width:17%}
+.purchase-workspace .purchase-detail-table .purchase-document-col{width:13%}
+.purchase-workspace .purchase-detail-table .purchase-number-col{width:11%}
+.purchase-workspace .purchase-detail-table .purchase-discount-col{width:9%}
+.purchase-workspace .purchase-detail-table .purchase-description-col{width:31%}
+.purchase-workspace .purchase-detail-table .purchase-action-col{width:4%}
+.purchase-workspace .purchase-detail-table th:nth-child(n),
+.purchase-workspace .purchase-detail-table td:nth-child(n){width:auto}
+.purchase-workspace .purchase-detail-table input,
+.purchase-workspace .purchase-detail-table select{width:100%;min-width:0}
 
 
 /* Purchase notice layout: supplier/document compact; pharmacy/public/discount enabled */
