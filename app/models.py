@@ -15,10 +15,37 @@ class Supplier(Base):
     __tablename__='suppliers'
     id=Column(Integer,primary_key=True); code=Column(String(20),unique=True,nullable=False); name=Column(String(160),unique=True,nullable=False); phone=Column(String(50),default=''); opening_debit=Column(Float,default=0,nullable=False); opening_credit=Column(Float,default=0,nullable=False); is_active=Column(Boolean,default=True,nullable=False)
     purchase_lines=relationship('PurchaseLine',back_populates='supplier')
+class User(Base):
+    __tablename__='users'
+    id=Column(Integer,primary_key=True); code=Column(String(20),unique=True,nullable=False); username=Column(String(80),unique=True,nullable=False); full_name=Column(String(150),nullable=False); role=Column(String(80),default='مستخدم'); permissions=Column(String(500),default=''); is_active=Column(Boolean,default=True,nullable=False)
+class Customer(Base):
+    __tablename__='customers'
+    id=Column(Integer,primary_key=True); code=Column(String(20),unique=True,nullable=False); name=Column(String(160),unique=True,nullable=False); phone=Column(String(50),default=''); opening_debit=Column(Float,default=0,nullable=False); opening_credit=Column(Float,default=0,nullable=False); is_active=Column(Boolean,default=True,nullable=False)
+class Treasury(Base):
+    __tablename__='treasuries'
+    id=Column(Integer,primary_key=True); code=Column(String(20),unique=True,nullable=False); name=Column(String(150),unique=True,nullable=False); branch_id=Column(Integer,ForeignKey('branches.id'),nullable=False); opening_balance=Column(Float,default=0,nullable=False); is_active=Column(Boolean,default=True,nullable=False)
+    branch=relationship('Branch')
+class Bank(Base):
+    __tablename__='banks'
+    id=Column(Integer,primary_key=True); code=Column(String(20),unique=True,nullable=False); name=Column(String(150),nullable=False); account_number=Column(String(100),default=''); opening_balance=Column(Float,default=0,nullable=False); is_active=Column(Boolean,default=True,nullable=False)
+class ExpenseItem(Base):
+    __tablename__='expense_items'
+    id=Column(Integer,primary_key=True); code=Column(String(20),unique=True,nullable=False); name=Column(String(150),unique=True,nullable=False); description=Column(String(300),default=''); is_active=Column(Boolean,default=True,nullable=False)
+class OtherAccountItem(Base):
+    __tablename__='other_account_items'
+    id=Column(Integer,primary_key=True); code=Column(String(20),unique=True,nullable=False); name=Column(String(150),unique=True,nullable=False); account_type=Column(String(80),default=''); effect_sign=Column(Integer,default=1,nullable=False); description=Column(String(300),default=''); is_active=Column(Boolean,default=True,nullable=False)
+class OpeningStock(Base):
+    __tablename__='opening_stocks'
+    id=Column(Integer,primary_key=True); code=Column(String(20),unique=True,nullable=False); item_name=Column(String(180),nullable=False); branch_id=Column(Integer,ForeignKey('branches.id'),nullable=False); quantity=Column(Float,default=0,nullable=False); unit_cost=Column(Float,default=0,nullable=False); notes=Column(String(300),default='')
+    branch=relationship('Branch')
+class TreasuryDeposit(Base):
+    __tablename__='treasury_deposits'
+    id=Column(Integer,primary_key=True); sales_journal_id=Column(Integer,ForeignKey('sales_journals.id'),unique=True,nullable=False); treasury_id=Column(Integer,ForeignKey('treasuries.id'),nullable=False); amount=Column(Float,default=0,nullable=False); created_at=Column(DateTime,default=datetime.utcnow,nullable=False)
+    treasury=relationship('Treasury'); sales_journal=relationship('SalesJournal',back_populates='treasury_deposit')
 class SalesJournal(Base):
     __tablename__='sales_journals'; __table_args__=(UniqueConstraint('branch_id','journal_date',name='uq_sales_branch_date'),)
     id=Column(Integer,primary_key=True); journal_no=Column(String(30),unique=True,nullable=False,index=True); journal_date=Column(Date,nullable=False,default=date.today,index=True); branch_id=Column(Integer,ForeignKey('branches.id'),nullable=False,index=True); status=Column(String(20),default='draft',nullable=False,index=True); notes=Column(String(500),default=''); created_at=Column(DateTime,default=datetime.utcnow,nullable=False); updated_at=Column(DateTime,default=datetime.utcnow,onupdate=datetime.utcnow,nullable=False); posted_at=Column(DateTime)
-    branch=relationship('Branch',back_populates='sales_journals'); lines=relationship('SalesLine',back_populates='journal',cascade='all, delete-orphan',order_by='SalesLine.id')
+    branch=relationship('Branch',back_populates='sales_journals'); lines=relationship('SalesLine',back_populates='journal',cascade='all, delete-orphan',order_by='SalesLine.id'); treasury_deposit=relationship('TreasuryDeposit',back_populates='sales_journal',uselist=False,cascade='all, delete-orphan')
     total_shift=property(lambda s:sum(x.shift_value or 0 for x in s.lines)); total_discount=property(lambda s:sum(x.discount or 0 for x in s.lines)); total_net_cash=property(lambda s:sum(x.net_cash or 0 for x in s.lines)); total_cash_difference=property(lambda s:sum(x.cash_difference or 0 for x in s.lines))
 class SalesLine(Base):
     __tablename__='sales_lines'
