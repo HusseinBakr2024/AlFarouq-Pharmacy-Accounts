@@ -9,11 +9,13 @@ from fastapi.templating import Jinja2Templates
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
-from sqlalchemy import func
+from sqlalchemy import func, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import Base, SessionLocal, engine, get_db
-from app.models import Branch, Employee, Supplier, SalesJournal, SalesLine, PurchaseJournal, PurchaseLine
+from app.models import (Branch, Employee, Supplier, SalesJournal, SalesLine, PurchaseJournal, PurchaseLine,
+    User, Customer, Treasury, Bank, ExpenseItem, OtherAccountItem, OpeningStock)
 
 Base.metadata.create_all(bind=engine)
 
@@ -86,30 +88,54 @@ def next_code(db: Session, model, prefix: str) -> str:
     last = db.query(model).order_by(model.id.desc()).first()
     return f"{prefix}-{((last.id if last else 0)+1):04d}"
 
+SETTINGS = {
+ "users": (User,"USR","المستخدمون والصلاحيات",[("username","اسم المستخدم","text"),("full_name","الاسم بالكامل","text"),("role","الدور","text"),("permissions","الصلاحيات","text"),("is_active","نشط","bool")]),
+ "employees": (Employee,"EMP","الموظفون",[("name","اسم الموظف","text"),("branch_id","الفرع","branch"),("job_title","الوظيفة","text"),("is_active","نشط","bool")]),
+ "branches": (Branch,"BR","الفروع",[("name","اسم الفرع","text"),("is_active","نشط","bool")]),
+ "customers": (Customer,"CUS","العملاء",[("name","اسم العميل","text"),("phone","رقم التواصل","text"),("opening_debit","افتتاحي مدين","number"),("opening_credit","افتتاحي دائن","number"),("is_active","نشط","bool")]),
+ "suppliers": (Supplier,"SUP","الموردون",[("name","اسم المورد","text"),("phone","رقم التواصل","text"),("opening_debit","افتتاحي مدين","number"),("opening_credit","افتتاحي دائن","number"),("is_active","نشط","bool")]),
+ "treasuries": (Treasury,"TRE","الخزائن",[("name","اسم الخزينة","text"),("branch_id","الفرع","branch"),("opening_balance","الرصيد الافتتاحي","number"),("is_active","نشط","bool")]),
+ "banks": (Bank,"BNK","البنوك",[("name","اسم البنك","text"),("account_number","رقم الحساب","text"),("opening_balance","الرصيد الافتتاحي","number"),("is_active","نشط","bool")]),
+ "expenses": (ExpenseItem,"EXP","بنود المصروفات",[("name","اسم البند","text"),("description","البيان","text"),("is_active","نشط","bool")]),
+ "other_accounts": (OtherAccountItem,"ACC","بنود الحسابات الأخرى",[("name","اسم البند","text"),("account_type","نوع الحساب","text"),("description","البيان","text"),("is_active","نشط","bool")]),
+ "opening_stock": (OpeningStock,"STK","المخزون الافتتاحي",[("item_name","اسم الصنف","text"),("branch_id","الفرع","branch"),("quantity","الكمية","number"),("unit_cost","تكلفة الوحدة","number"),("notes","ملاحظات","text")]),
+}
+
 @app.get("/settings", response_class=HTMLResponse)
-def settings(request: Request, tab: str = "branches", db: Session = Depends(get_db)):
-    return render(request, "settings/index.html", "الإعدادات", "settings", tab=tab, branches=db.query(Branch).order_by(Branch.id.desc()).all(), employees=db.query(Employee).options(joinedload(Employee.branch)).order_by(Employee.id.desc()).all(), suppliers=db.query(Supplier).order_by(Supplier.id.desc()).all(), next_branch=next_code(db,Branch,"BR"), next_employee=next_code(db,Employee,"EM"), next_supplier=next_code(db,Supplier,"SU"), message=request.query_params.get("message", ""))
+def settings(request: Request, tab: str = "users", search: str = "", edit_id: Optional[int] = None, db: Session = Depends(get_db)):
+    if tab not in SETTINGS: tab="users"
+    model,prefix,title,fields=SETTINGS[tab]; query=db.query(model)
+    searchable=[model.code]+[getattr(model,n) for n,_,kind in fields if kind=="text"]
+    if search and searchable: query=query.filter(or_(*[x.ilike(f"%{search}%") for x in searchable]))
+    records=query.order_by(model.id.desc()).all(); editing=db.get(model,edit_id) if edit_id else None
+    tabs=[{"key":k,"title":v[2]} for k,v in SETTINGS.items()]
+    return render(request,"settings/index.html","الإعدادات","settings",tab=tab,tabs=tabs,title=title,fields=fields,records=records,editing=editing,next_value=next_code(db,model,prefix),branches=db.query(Branch).filter(Branch.is_active.is_(True)).order_by(Branch.name).all(),search=search,message=request.query_params.get("message",""))
 
-@app.post("/settings/branches/save")
-async def save_branch(request: Request, db: Session = Depends(get_db)):
-    f=await request.form(); name=str(f.get("name") or "").strip()
-    if not name: return RedirectResponse("/settings?tab=branches&message=أدخل اسم الفرع",303)
-    db.add(Branch(code=next_code(db,Branch,"BR"),name=name,is_active=bool(f.get("is_active")))); db.commit()
-    return RedirectResponse("/settings?tab=branches&message=تم حفظ الفرع",303)
+@app.post("/settings/{tab}/save")
+async def save_setting(tab: str, request: Request, db: Session = Depends(get_db)):
+    if tab not in SETTINGS: raise HTTPException(404)
+    model,prefix,_,fields=SETTINGS[tab]; form=await request.form(); record=db.get(model,int(form.get("id"))) if form.get("id") else model(code=next_code(db,model,prefix))
+    for name,_,kind in fields:
+        raw=form.get(name)
+        if kind=="bool": value=bool(raw)
+        elif kind=="number": value=float(raw or 0)
+        elif kind=="branch": value=int(raw or 0)
+        else: value=str(raw or "").strip()
+        setattr(record,name,value)
+    if not getattr(record,"id",None): db.add(record)
+    try: db.commit()
+    except IntegrityError:
+        db.rollback(); return RedirectResponse(f"/settings?tab={tab}&message=تعذر الحفظ، تحقق من عدم تكرار البيانات",303)
+    return RedirectResponse(f"/settings?tab={tab}&message=تم حفظ البيانات بنجاح",303)
 
-@app.post("/settings/employees/save")
-async def save_employee(request: Request, db: Session = Depends(get_db)):
-    f=await request.form(); name=str(f.get("name") or "").strip(); branch_id=int(f.get("branch_id") or 0)
-    if not name or not branch_id: return RedirectResponse("/settings?tab=employees&message=أدخل الاسم والفرع",303)
-    db.add(Employee(code=next_code(db,Employee,"EM"),name=name,job_title=str(f.get("job_title") or ""),branch_id=branch_id,is_active=bool(f.get("is_active")))); db.commit()
-    return RedirectResponse("/settings?tab=employees&message=تم حفظ الموظف",303)
-
-@app.post("/settings/suppliers/save")
-async def save_supplier(request: Request, db: Session = Depends(get_db)):
-    f=await request.form(); name=str(f.get("name") or "").strip()
-    if not name: return RedirectResponse("/settings?tab=suppliers&message=أدخل اسم المورد",303)
-    db.add(Supplier(code=next_code(db,Supplier,"SU"),name=name,phone=str(f.get("phone") or ""),opening_debit=float(f.get("opening_debit") or 0),opening_credit=float(f.get("opening_credit") or 0),is_active=bool(f.get("is_active")))); db.commit()
-    return RedirectResponse("/settings?tab=suppliers&message=تم حفظ المورد",303)
+@app.post("/settings/{tab}/{record_id}/delete")
+def delete_setting(tab: str, record_id: int, db: Session = Depends(get_db)):
+    if tab not in SETTINGS: raise HTTPException(404)
+    record=db.get(SETTINGS[tab][0],record_id)
+    if record:
+        try: db.delete(record); db.commit()
+        except IntegrityError: db.rollback(); return RedirectResponse(f"/settings?tab={tab}&message=لا يمكن حذف سجل مرتبط بحركات",303)
+    return RedirectResponse(f"/settings?tab={tab}&message=تم حذف البيانات",303)
 
 
 @app.get("/closing-stock", response_class=HTMLResponse)
