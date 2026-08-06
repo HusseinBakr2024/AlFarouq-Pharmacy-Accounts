@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>{{ page_title }} | صيدليات الفاروق</title>
+
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', path='css/style.css') }}">
+</head>
+
+<body>
+
+<button type="button" id="mobileMenuButton" class="mobile-menu-button">
+    <i class="fa-solid fa-bars"></i>
+</button>
+
+<aside class="sidebar" id="sidebar">
+
+    <button type="button" class="sidebar-toggle" id="sidebarToggle" title="إخفاء القائمة">
+        <i class="fa-solid fa-chevron-right" id="sidebarToggleIcon"></i>
+    </button>
+
+    <a href="/dashboard" class="sidebar-brand" title="لوحة المعلومات">
+        <div class="brand-logo">
+            <img src="{{ url_for('static', path='assets/logo.png') }}"
+                 alt="شعار صيدليات الفاروق"
+                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+
+            <div class="logo-fallback">
+                <i class="fa-solid fa-prescription-bottle-medical"></i>
+            </div>
+        </div>
+
+        <div class="brand-text">
+            <strong>صيدليات الفاروق</strong>
+            <span>نظام إدارة الحسابات</span>
+        </div>
+    </a>
+
+    <nav class="sidebar-menu">
+
+        <div class="menu-main">
+
+            <a href="/"
+               class="menu-link {% if active_page == 'home' %}active{% endif %}" title="الرئيسية">
+                <i class="fa-solid fa-house"></i>
+                <span>الرئيسية</span>
+            </a>
+
+            <a href="/sales" class="menu-link {% if active_page == 'sales' %}active{% endif %}" title="يومية المبيعات">
+                <i class="fa-solid fa-cash-register"></i>
+                <span>يومية المبيعات</span>
+            </a>
+
+            <a href="/review" class="menu-link {% if active_page == 'review' %}active{% endif %}" title="مراجعة وترحيل">
+                <i class="fa-solid fa-clipboard-check"></i>
+                <span>مراجعة وترحيل</span>
+            </a>
+
+            <a href="/purchases" class="menu-link {% if active_page == 'purchases' %}active{% endif %}" title="يومية المشتريات">
+                <i class="fa-solid fa-cart-shopping"></i>
+                <span>يومية المشتريات</span>
+            </a>
+
+            <a href="#" class="menu-link" title="يومية المصروفات">
+                <i class="fa-solid fa-money-bill-wave"></i>
+                <span>يومية المصروفات</span>
+            </a>
+
+            <a href="#" class="menu-link" title="يومية الحسابات الأخرى">
+                <i class="fa-solid fa-right-left"></i>
+                <span>يومية الحسابات الأخرى</span>
+            </a>
+
+            <a href="#" class="menu-link" title="سداد الموردين">
+                <i class="fa-solid fa-hand-holding-dollar"></i>
+                <span>سداد الموردين</span>
+            </a>
+
+            <a href="#" class="menu-link" title="البنوك والشيكات">
+                <i class="fa-solid fa-building-columns"></i>
+                <span>البنوك والشيكات</span>
+            </a>
+
+            <a href="#" class="menu-link" title="مطابقات الموردين">
+                <i class="fa-solid fa-file-circle-check"></i>
+                <span>مطابقات الموردين</span>
+            </a>
+
+            <a href="/reports/sales" class="menu-link {% if active_page == 'sales_report' %}active{% endif %}" title="تقرير المبيعات"><i class="fa-solid fa-chart-column"></i><span>تقرير المبيعات</span></a>
+            <a href="/reports/purchases" class="menu-link {% if active_page == 'purchase_report' %}active{% endif %}" title="تقرير المشتريات"><i class="fa-solid fa-chart-pie"></i><span>تقرير المشتريات</span></a>
+
+            <a href="/closing-stock" class="menu-link {% if active_page == 'closing_stock' %}active{% endif %}" title="مخزون آخر الفترة">
+                <i class="fa-solid fa-box-open"></i>
+                <span>مخزون آخر الفترة</span>
+            </a>
+
+        </div>
+
+        <div class="menu-bottom">
+            <a href="/settings"
+   class="menu-link settings-link {% if active_page == 'settings' %}active{% endif %}" title="الإعدادات">
+                <i class="fa-solid fa-gear"></i>
+                <span>الإعدادات</span>
+            </a>
+        </div>
+
+    </nav>
+
+</aside>
+
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+<main class="main-content" id="mainContent">
+
+    <header class="topbar">
+
+        <div class="topbar-title">
+            <h1>{{ page_title }}</h1>
+            <p>نظام إدارة الحسابات والرقابة المالية</p>
+        </div>
+
+        <div class="topbar-user">
+            <div class="user-icon">
+                <i class="fa-solid fa-user"></i>
+            </div>
+
+            <div>
+                <strong>مدير النظام</strong>
+                <span>صيدليات الفاروق</span>
+            </div>
+        </div>
+
+    </header>
+
+    <section class="page-content">
+        {% block content %}{% endblock %}
+    </section>
+
+    <footer class="system-footer">
+        <span>Created by</span>
+        <strong>Dr. Hussein Bakr</strong>
+    </footer>
+
+</main>
+
+<script src="{{ url_for('static', path='js/app.js') }}"></script>
+
+</body>
+</html>

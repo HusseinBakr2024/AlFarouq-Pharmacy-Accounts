@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="home-screen">
+
+    <div class="home-card">
+
+        <img src="{{ url_for('static', path='assets/logo.png') }}"
+             alt="شعار صيدليات الفاروق"
+             class="home-logo"
+             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+
+        <div class="home-logo-fallback">
+            <i class="fa-solid fa-prescription-bottle-medical"></i>
+        </div>
+
+        <h2>صيدليات الفاروق</h2>
+
+        <p>نظام إدارة الحسابات والرقابة المالية</p>
+
+    </div>
+
+</div>
+
+{% endblock %}

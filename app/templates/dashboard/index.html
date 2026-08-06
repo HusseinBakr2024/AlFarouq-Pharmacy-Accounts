@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div style="
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 18px;
+">
+
+    <div style="background:white;padding:22px;border-radius:12px;">
+        <div>مبيعات اليوم</div>
+        <h2>0.00</h2>
+    </div>
+
+    <div style="background:white;padding:22px;border-radius:12px;">
+        <div>مشتريات اليوم</div>
+        <h2>0.00</h2>
+    </div>
+
+    <div style="background:white;padding:22px;border-radius:12px;">
+        <div>مصروفات اليوم</div>
+        <h2>0.00</h2>
+    </div>
+
+    <div style="background:white;padding:22px;border-radius:12px;">
+        <div>أرصدة الخزائن</div>
+        <h2>0.00</h2>
+    </div>
+
+</div>
+
+{% endblock %}
