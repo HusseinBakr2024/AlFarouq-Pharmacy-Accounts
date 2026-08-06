@@ -24,6 +24,10 @@ with engine.begin() as connection:
     columns={column["name"] for column in inspect(connection).get_columns("other_account_items")}
     if "effect_sign" not in columns:
         connection.execute(text("ALTER TABLE other_account_items ADD COLUMN effect_sign INTEGER NOT NULL DEFAULT 1"))
+    purchase_journal_columns={column["name"] for column in inspect(connection).get_columns("purchase_journals")}
+    if "notice_type" not in purchase_journal_columns:
+        connection.execute(text("ALTER TABLE purchase_journals ADD COLUMN notice_type VARCHAR(40) NOT NULL DEFAULT ''"))
+        connection.execute(text("UPDATE purchase_journals SET notice_type = COALESCE((SELECT notice_type FROM purchase_lines WHERE purchase_lines.journal_id = purchase_journals.id AND notice_type <> '' LIMIT 1), '') WHERE entry_type = 'notice'"))
 
 app = FastAPI(title="صيدليات الفاروق")
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
@@ -383,29 +387,25 @@ def purchases(request: Request, edit_id: Optional[int]=None, search: str="", sta
     if journal_date:q=q.filter(PurchaseJournal.journal_date==parse_date(journal_date))
     if status in {"draft","posted"}: q=q.filter(PurchaseJournal.status==status)
     results=q.order_by(PurchaseJournal.journal_date.desc(),PurchaseJournal.id.desc()).limit(100).all()
-    return render(request,"purchases/index.html","يومية المشتريات","purchases",suppliers=db.query(Supplier).filter(Supplier.is_active.is_(True)).order_by(Supplier.name).all(),notice_types=db.query(OtherAccountItem).filter(OtherAccountItem.is_active.is_(True)).order_by(OtherAccountItem.name).all(),journal=journal,results=results,today=date.today().strftime("%d/%m/%Y"),readonly=bool(journal and journal.status=="posted"),search=search,selected_status=status,selected_date=journal_date or "",message=request.query_params.get("message",""))
+    return render(request,"purchases/index.html","يومية المشتريات","purchases",suppliers=db.query(Supplier).filter(Supplier.is_active.is_(True)).order_by(Supplier.name).all(),notice_types=db.query(OtherAccountItem).filter(OtherAccountItem.is_active.is_(True)).order_by(OtherAccountItem.name).all(),journal=journal,results=results,today=date.today().isoformat(),readonly=bool(journal and journal.status=="posted"),search=search,selected_status=status,selected_date=journal_date or "",message=request.query_params.get("message",""))
 
 @app.post("/purchases/save")
 async def save_purchases(request: Request, db: Session=Depends(get_db)):
     f=await request.form(); jid=int(f.get("journal_id") or 0); d=parse_date(str(f.get("journal_date") or ""),date.today()); et=str(f.get("entry_type") or "purchase")
-    supplier_ids=f.getlist("supplier_id"); docs=f.getlist("document_no"); nts=f.getlist("notice_type"); pvs=f.getlist("pharmacy_value"); pubs=f.getlist("public_value"); descs=f.getlist("description"); notes=f.getlist("line_notes")
+    fixed_notice_types={"مرتجع":-1,"لم يصل":-1,"خصم إضافي":-1,"ت. إضافية":1,"غرامة":-1,"أخرى":1}
+    journal_notice_type=str(f.get("notice_type") or "").strip() if et=="notice" else ""
+    if et not in {"purchase","notice"}: return RedirectResponse("/purchases?message=اختر نوع اليومية",303)
+    if et=="notice" and journal_notice_type not in fixed_notice_types: return RedirectResponse("/purchases?message=اختر نوع الإشعار",303)
+    supplier_ids=f.getlist("supplier_id"); docs=f.getlist("document_no"); pvs=f.getlist("pharmacy_value"); pubs=f.getlist("public_value"); descs=f.getlist("description"); notes=f.getlist("line_notes")
     rows=[]
     for i,sid in enumerate(supplier_ids):
         if not sid or not docs[i].strip(): continue
         pv=float(pvs[i] or 0); pub=float(pubs[i] or 0); disc=((pub-pv)/pv*100) if pv else 0; nt=""; effect=pv
         if et=="notice":
-            fixed_notice_types={
-                "مرتجع":-1,
-                "لم يصل":-1,
-                "خصم إضافي":-1,
-                "ت. إضافية":1,
-                "غرامة":-1,
-                "أخرى":1,
-            }
-            nt=(nts[i].strip() if i<len(nts) else "")
-            if nt not in fixed_notice_types:return RedirectResponse("/purchases?message=اختر نوع الإشعار",303)
+            nt=journal_notice_type
             if pv <= 0:return RedirectResponse("/purchases?message=أدخل القيمة صيدلي للإشعار",303)
             if pub <= 0:return RedirectResponse("/purchases?message=أدخل القيمة جمهور للإشعار",303)
+            if not (descs[i].strip() if i<len(descs) else ""):return RedirectResponse("/purchases?message=أدخل البيان لكل سطر إشعار",303)
             effect=abs(pv) * fixed_notice_types[nt]
         rows.append((int(sid),docs[i].strip(),nt,pv,pub,max(disc,0),effect,descs[i] if i<len(descs) else "",notes[i] if i<len(notes) else ""))
     if not rows: return RedirectResponse("/purchases?message=أدخل حركة واحدة على الأقل",303)
@@ -416,9 +416,9 @@ async def save_purchases(request: Request, db: Session=Depends(get_db)):
     if jid:
         j=db.query(PurchaseJournal).options(joinedload(PurchaseJournal.lines)).filter(PurchaseJournal.id==jid).first()
         if not j or j.status=="posted": return RedirectResponse("/purchases?message=لا يمكن تعديل اليومية",303)
-        j.journal_date=d; j.entry_type=et; j.lines.clear()
+        j.journal_date=d; j.entry_type=et; j.notice_type=journal_notice_type; j.lines.clear()
     else:
-        j=PurchaseJournal(journal_no=next_purchase_no(db,d),journal_date=d,entry_type=et); db.add(j)
+        j=PurchaseJournal(journal_no=next_purchase_no(db,d),journal_date=d,entry_type=et,notice_type=journal_notice_type); db.add(j)
     for sid,doc,nt,pv,pub,disc,effect,des,ntes in rows: j.lines.append(PurchaseLine(supplier_id=sid,entry_type=et,document_no=doc,notice_type=nt,pharmacy_value=pv,public_value=pub,discount_percent=disc,account_effect=effect,description=des,notes=ntes))
     db.commit(); return RedirectResponse("/purchases?message=تم حفظ اليومية بنجاح",303)
 

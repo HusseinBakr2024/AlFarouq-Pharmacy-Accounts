@@ -53,7 +53,7 @@ class SalesLine(Base):
     journal=relationship('SalesJournal',back_populates='lines'); employee=relationship('Employee',back_populates='sales_lines')
 class PurchaseJournal(Base):
     __tablename__='purchase_journals'
-    id=Column(Integer,primary_key=True); journal_no=Column(String(30),unique=True,nullable=False,index=True); journal_date=Column(Date,nullable=False,index=True); entry_type=Column(String(20),nullable=False,default='purchase'); status=Column(String(20),default='draft',nullable=False,index=True); notes=Column(String(500),default=''); created_at=Column(DateTime,default=datetime.utcnow,nullable=False); posted_at=Column(DateTime)
+    id=Column(Integer,primary_key=True); journal_no=Column(String(30),unique=True,nullable=False,index=True); journal_date=Column(Date,nullable=False,index=True); entry_type=Column(String(20),nullable=False,default='purchase'); notice_type=Column(String(40),default='',nullable=False); status=Column(String(20),default='draft',nullable=False,index=True); notes=Column(String(500),default=''); created_at=Column(DateTime,default=datetime.utcnow,nullable=False); posted_at=Column(DateTime)
     lines=relationship('PurchaseLine',back_populates='journal',cascade='all, delete-orphan',order_by='PurchaseLine.id')
     total_pharmacy=property(lambda s:sum(x.pharmacy_value or 0 for x in s.lines)); total_public=property(lambda s:sum(x.public_value or 0 for x in s.lines)); total_effect=property(lambda s:sum(x.account_effect or 0 for x in s.lines))
 class PurchaseLine(Base):
