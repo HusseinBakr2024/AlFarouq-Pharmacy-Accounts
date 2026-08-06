@@ -1552,18 +1552,9 @@ body.page-purchases .title-metrics span{
 .purchase-workspace.notice-mode .purchase-grid th:last-child,
 .purchase-workspace.notice-mode .purchase-grid td:last-child{width:52px}
 
-/* Purchases journal uses the original roomy row controls; overflow stays inside the table shell. */
+/* Purchases keeps the Sales Journal shell; only the conditional header field differs. */
 .purchase-workspace .journal-notice-type{display:none}
 .purchase-workspace.notice-mode .journal-notice-type{display:block}
-.purchase-workspace .purchase-table-shell{overflow-x:auto!important;overflow-y:auto!important}
-.purchase-workspace .purchase-grid{width:max-content;min-width:100%;table-layout:auto!important}
-.purchase-workspace .purchase-grid th:nth-child(n),
-.purchase-workspace .purchase-grid td:nth-child(n){width:auto}
-.purchase-workspace .purchase-grid input,
-.purchase-workspace .purchase-grid select{min-width:145px}
-.purchase-workspace .purchase-grid th:nth-child(2) select{min-width:230px}
-.purchase-workspace .purchase-grid .line-description{min-width:220px}
-.purchase-workspace .purchase-head-controls{grid-template-columns:repeat(4,minmax(145px,1fr))}
 
 
 /* Purchase notice layout: supplier/document compact; pharmacy/public/discount enabled */

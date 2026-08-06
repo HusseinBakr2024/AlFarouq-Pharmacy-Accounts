@@ -387,7 +387,7 @@ def purchases(request: Request, edit_id: Optional[int]=None, search: str="", sta
     if journal_date:q=q.filter(PurchaseJournal.journal_date==parse_date(journal_date))
     if status in {"draft","posted"}: q=q.filter(PurchaseJournal.status==status)
     results=q.order_by(PurchaseJournal.journal_date.desc(),PurchaseJournal.id.desc()).limit(100).all()
-    return render(request,"purchases/index.html","يومية المشتريات","purchases",suppliers=db.query(Supplier).filter(Supplier.is_active.is_(True)).order_by(Supplier.name).all(),notice_types=db.query(OtherAccountItem).filter(OtherAccountItem.is_active.is_(True)).order_by(OtherAccountItem.name).all(),journal=journal,results=results,today=date.today().isoformat(),readonly=bool(journal and journal.status=="posted"),search=search,selected_status=status,selected_date=journal_date or "",message=request.query_params.get("message",""))
+    return render(request,"purchases/index.html","يومية المشتريات","purchases",suppliers=db.query(Supplier).filter(Supplier.is_active.is_(True)).order_by(Supplier.name).all(),notice_types=db.query(OtherAccountItem).filter(OtherAccountItem.is_active.is_(True)).order_by(OtherAccountItem.name).all(),journal=journal,results=results,today=date.today().strftime("%d/%m/%Y"),readonly=bool(journal and journal.status=="posted"),search=search,selected_status=status,selected_date=journal_date or "",message=request.query_params.get("message",""))
 
 @app.post("/purchases/save")
 async def save_purchases(request: Request, db: Session=Depends(get_db)):
