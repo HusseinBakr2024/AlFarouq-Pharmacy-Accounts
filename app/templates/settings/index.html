@@ -1,20 +1,31 @@
-{% extends "base.html" %}{% block content %}
-<div class="settings-page compact-page">
-{% if message %}<div class="message success">{{ message }}</div>{% endif %}
-<div class="settings-layout master-layout">
-<nav class="settings-tabs">
-<button class="settings-tab {% if tab=='branches' %}active{% endif %}" data-tab="branches"><i class="fa-solid fa-code-branch"></i><span>الفروع</span></button>
-<button class="settings-tab {% if tab=='employees' %}active{% endif %}" data-tab="employees"><i class="fa-solid fa-user-tie"></i><span>الموظفون</span></button>
-<button class="settings-tab {% if tab=='suppliers' %}active{% endif %}" data-tab="suppliers"><i class="fa-solid fa-truck-field"></i><span>الموردون</span></button>
-</nav>
-<div class="settings-content">
-<section class="settings-panel {% if tab=='branches' %}active{% endif %}" id="branches"><div class="panel-heading"><h3>الفروع</h3></div>
-<form method="post" action="/settings/branches/save" class="definition-form"><div class="form-grid four-columns"><div class="form-field"><label>الكود</label><input value="{{ next_branch }}" readonly></div><div class="form-field"><label>اسم الفرع</label><input name="name" required></div><label class="inline-check"><input type="checkbox" name="is_active" checked> نشط</label><button class="primary-button" type="submit"><i class="fa-solid fa-floppy-disk"></i> حفظ الفرع</button></div></form>
-<div class="data-table-wrap"><table class="data-table"><thead><tr><th>الكود</th><th>اسم الفرع</th><th>الحالة</th></tr></thead><tbody>{% for x in branches %}<tr><td>{{x.code}}</td><td>{{x.name}}</td><td>{{'نشط' if x.is_active else 'موقوف'}}</td></tr>{% else %}<tr><td colspan="3">لا توجد بيانات</td></tr>{% endfor %}</tbody></table></div></section>
-<section class="settings-panel {% if tab=='employees' %}active{% endif %}" id="employees"><div class="panel-heading"><h3>الموظفون</h3></div>
-<form method="post" action="/settings/employees/save"><div class="form-grid four-columns"><div class="form-field"><label>الكود</label><input value="{{next_employee}}" readonly></div><div class="form-field"><label>اسم الموظف</label><input name="name" required></div><div class="form-field"><label>الفرع</label><select name="branch_id" required><option value="">اختر</option>{% for b in branches if b.is_active %}<option value="{{b.id}}">{{b.name}}</option>{% endfor %}</select></div><div class="form-field"><label>الوظيفة</label><input name="job_title"></div><label class="inline-check"><input type="checkbox" name="is_active" checked> نشط</label><button class="primary-button" type="submit">حفظ الموظف</button></div></form>
-<div class="data-table-wrap"><table class="data-table"><thead><tr><th>الكود</th><th>الموظف</th><th>الفرع</th><th>الوظيفة</th><th>الحالة</th></tr></thead><tbody>{% for x in employees %}<tr><td>{{x.code}}</td><td>{{x.name}}</td><td>{{x.branch.name}}</td><td>{{x.job_title}}</td><td>{{'نشط' if x.is_active else 'موقوف'}}</td></tr>{% else %}<tr><td colspan="5">لا توجد بيانات</td></tr>{% endfor %}</tbody></table></div></section>
-<section class="settings-panel {% if tab=='suppliers' %}active{% endif %}" id="suppliers"><div class="panel-heading"><h3>الموردون</h3></div>
-<form method="post" action="/settings/suppliers/save"><div class="form-grid four-columns"><div class="form-field"><label>الكود</label><input value="{{next_supplier}}" readonly></div><div class="form-field"><label>اسم المورد</label><input name="name" required></div><div class="form-field"><label>رقم التواصل</label><input name="phone"></div><div class="form-field"><label>افتتاحي مدين</label><input type="number" step="0.01" name="opening_debit"></div><div class="form-field"><label>افتتاحي دائن</label><input type="number" step="0.01" name="opening_credit"></div><label class="inline-check"><input type="checkbox" name="is_active" checked> نشط</label><button class="primary-button" type="submit">حفظ المورد</button></div></form>
-<div class="data-table-wrap"><table class="data-table"><thead><tr><th>الكود</th><th>المورد</th><th>التواصل</th><th>مدين</th><th>دائن</th><th>الحالة</th></tr></thead><tbody>{% for x in suppliers %}<tr><td>{{x.code}}</td><td>{{x.name}}</td><td>{{x.phone}}</td><td>{{'%.2f'|format(x.opening_debit)}}</td><td>{{'%.2f'|format(x.opening_credit)}}</td><td>{{'نشط' if x.is_active else 'موقوف'}}</td></tr>{% else %}<tr><td colspan="6">لا توجد بيانات</td></tr>{% endfor %}</tbody></table></div></section>
-</div></div></div>{% endblock %}
+{% extends "base.html" %}
+{% block content %}
+<div class="settings-page settings-workspace">
+  <header class="settings-titlebar">
+    <div><h2><i class="fa-solid fa-sliders"></i> الإعدادات والتعريفات</h2><p>إدارة بيانات النظام الأساسية من شاشة واحدة</p></div>
+    <span class="settings-count">{{ records|length }} سجل</span>
+  </header>
+  {% if message %}<div class="message success">{{ message }}</div>{% endif %}
+  <nav class="settings-tabs settings-tabs-horizontal" aria-label="أقسام الإعدادات">
+    {% for item in tabs %}<a class="settings-tab {% if tab==item.key %}active{% endif %}" href="/settings?tab={{item.key}}"><span>{{item.title}}</span></a>{% endfor %}
+  </nav>
+  <main class="settings-panel active settings-single-panel">
+    <div class="panel-heading"><div><h3>{{ title }}</h3><small>{{ 'تعديل السجل المحدد' if editing else 'إضافة تعريف جديد' }}</small></div></div>
+    <form method="post" action="/settings/{{tab}}/save" class="definition-form settings-editor">
+      {% if editing %}<input type="hidden" name="id" value="{{editing.id}}">{% endif %}
+      <div class="form-field code-field"><label>الكود التلقائي</label><input class="auto-code" value="{{editing.code if editing else next_value}}" readonly></div>
+      {% for name,label,kind in fields %}
+        {% if kind == 'bool' %}<label class="inline-check settings-check"><input type="checkbox" name="{{name}}" {% if (editing and editing|attr(name)) or not editing %}checked{% endif %}> {{label}}</label>
+        {% elif kind == 'branch' %}<div class="form-field"><label>{{label}}</label><select name="{{name}}" required><option value="">اختر {{label}}</option>{% for branch in branches %}<option value="{{branch.id}}" {% if editing and editing|attr(name)==branch.id %}selected{% endif %}>{{branch.code}} — {{branch.name}}</option>{% endfor %}</select></div>
+        {% else %}<div class="form-field"><label>{{label}}</label><input name="{{name}}" type="{{'number' if kind=='number' else 'text'}}" {% if kind=='number' %}step="0.01"{% endif %} value="{{editing|attr(name) if editing else ''}}" {% if loop.first %}required{% endif %}></div>{% endif %}
+      {% endfor %}
+      <div class="settings-form-actions"><button class="primary-button" type="submit"><i class="fa-solid fa-floppy-disk"></i> {{'حفظ التعديل' if editing else 'إضافة'}}</button>{% if editing %}<a class="secondary-button" href="/settings?tab={{tab}}">إلغاء</a>{% endif %}</div>
+    </form>
+    <div class="settings-table-head"><h3>بيانات {{title}}</h3><form method="get" action="/settings" class="settings-search"><input type="hidden" name="tab" value="{{tab}}"><input name="search" value="{{search}}" placeholder="ابحث بالاسم أو الكود..."><button type="submit" aria-label="بحث"><i class="fa-solid fa-magnifying-glass"></i></button>{% if search %}<a href="/settings?tab={{tab}}" title="مسح البحث"><i class="fa-solid fa-xmark"></i></a>{% endif %}</form></div>
+    <div class="data-table-wrap settings-data-wrap"><table class="data-table"><thead><tr><th>الكود</th>{% for name,label,kind in fields %}<th>{{label}}</th>{% endfor %}<th>الإجراءات</th></tr></thead><tbody>
+      {% for row in records %}<tr><td><strong>{{row.code}}</strong></td>{% for name,label,kind in fields %}<td>{% if kind=='bool' %}<span class="status-pill {{'enabled' if row|attr(name) else 'disabled'}}">{{'نشط' if row|attr(name) else 'موقوف'}}</span>{% elif kind=='branch' %}{{row.branch.name if row.branch else '—'}}{% elif kind=='number' %}{{'%.2f'|format(row|attr(name) or 0)}}{% else %}{{row|attr(name) or '—'}}{% endif %}</td>{% endfor %}<td class="row-actions"><a href="/settings?tab={{tab}}&edit_id={{row.id}}" class="icon-action edit" title="تعديل"><i class="fa-solid fa-pen"></i></a><form method="post" action="/settings/{{tab}}/{{row.id}}/delete" onsubmit="return confirm('هل تريد حذف هذا السجل؟')"><button class="icon-action delete" title="حذف"><i class="fa-solid fa-trash"></i></button></form></td></tr>
+      {% else %}<tr><td colspan="{{fields|length + 2}}" class="empty-state"><i class="fa-regular fa-folder-open"></i><span>لا توجد بيانات مطابقة</span></td></tr>{% endfor %}
+    </tbody></table></div>
+  </main>
+</div>
+{% endblock %}

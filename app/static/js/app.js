@@ -62,6 +62,9 @@ function initSalesEntry(table) {
     const tbody = table.querySelector("tbody");
     const addButton = document.getElementById("addSalesRow");
     const branchSelect = document.getElementById("salesBranch");
+    const form = document.getElementById("salesJournalForm");
+    const dialog = document.getElementById("treasuryDialog");
+    const treasuryPicker = document.getElementById("treasuryPicker");
 
     function numberValue(input) { return Number.parseFloat(input?.value || "0") || 0; }
     function updateRowNumbers() {
@@ -139,5 +142,23 @@ function initSalesEntry(table) {
     tbody.querySelectorAll("tr").forEach(bindRow);
     if (addButton) addButton.addEventListener("click", addRow);
     if (branchSelect) branchSelect.addEventListener("change", filterEmployees);
+    function filterTreasuries() {
+        treasuryPicker?.querySelectorAll("option[data-branch]").forEach(option => {
+            option.hidden = Boolean(branchSelect?.value && option.dataset.branch !== branchSelect.value);
+        });
+        if (treasuryPicker?.selectedOptions[0]?.hidden) treasuryPicker.value = "";
+    }
+    document.getElementById("openTreasuryDialog")?.addEventListener("click", () => {
+        if (!form?.reportValidity()) return;
+        filterTreasuries();
+        document.getElementById("dialogNet").textContent = document.getElementById("metricNet")?.textContent || "0.00";
+        dialog?.showModal();
+    });
+    document.getElementById("closeTreasuryDialog")?.addEventListener("click", () => dialog?.close());
+    document.getElementById("confirmSalesSave")?.addEventListener("click", () => {
+        if (!treasuryPicker?.value) { treasuryPicker?.reportValidity(); return; }
+        const hidden=document.createElement("input"); hidden.type="hidden"; hidden.name="treasury_id"; hidden.value=treasuryPicker.value; form.appendChild(hidden); form.submit();
+    });
+    branchSelect?.addEventListener("change", filterTreasuries); filterTreasuries();
     filterEmployees(); updateMetrics();
 }

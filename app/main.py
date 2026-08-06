@@ -9,13 +9,21 @@ from fastapi.templating import Jinja2Templates
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
-from sqlalchemy import func
+from sqlalchemy import func, or_, inspect, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import Base, SessionLocal, engine, get_db
-from app.models import Branch, Employee, Supplier, SalesJournal, SalesLine, PurchaseJournal, PurchaseLine
+from app.models import (Branch, Employee, Supplier, SalesJournal, SalesLine, PurchaseJournal, PurchaseLine,
+    User, Customer, Treasury, Bank, ExpenseItem, OtherAccountItem, OpeningStock, TreasuryDeposit)
 
 Base.metadata.create_all(bind=engine)
+
+# Keep existing SQLite installations compatible with additive master-data fields.
+with engine.begin() as connection:
+    columns={column["name"] for column in inspect(connection).get_columns("other_account_items")}
+    if "effect_sign" not in columns:
+        connection.execute(text("ALTER TABLE other_account_items ADD COLUMN effect_sign INTEGER NOT NULL DEFAULT 1"))
 
 app = FastAPI(title="صيدليات الفاروق")
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
@@ -86,30 +94,54 @@ def next_code(db: Session, model, prefix: str) -> str:
     last = db.query(model).order_by(model.id.desc()).first()
     return f"{prefix}-{((last.id if last else 0)+1):04d}"
 
+SETTINGS = {
+ "users": (User,"USR","المستخدمون والصلاحيات",[("username","اسم المستخدم","text"),("full_name","الاسم بالكامل","text"),("role","الدور","text"),("permissions","الصلاحيات","text"),("is_active","نشط","bool")]),
+ "employees": (Employee,"EMP","الموظفون",[("name","اسم الموظف","text"),("branch_id","الفرع","branch"),("job_title","الوظيفة","text"),("is_active","نشط","bool")]),
+ "branches": (Branch,"BR","الفروع",[("name","اسم الفرع","text"),("is_active","نشط","bool")]),
+ "customers": (Customer,"CUS","العملاء",[("name","اسم العميل","text"),("phone","رقم التواصل","text"),("opening_debit","افتتاحي مدين","number"),("opening_credit","افتتاحي دائن","number"),("is_active","نشط","bool")]),
+ "suppliers": (Supplier,"SUP","الموردون",[("name","اسم المورد","text"),("phone","رقم التواصل","text"),("opening_debit","افتتاحي مدين","number"),("opening_credit","افتتاحي دائن","number"),("is_active","نشط","bool")]),
+ "treasuries": (Treasury,"TRE","الخزائن",[("name","اسم الخزينة","text"),("branch_id","الفرع","branch"),("opening_balance","الرصيد الافتتاحي","number"),("is_active","نشط","bool")]),
+ "banks": (Bank,"BNK","البنوك",[("name","اسم البنك","text"),("account_number","رقم الحساب","text"),("opening_balance","الرصيد الافتتاحي","number"),("is_active","نشط","bool")]),
+ "expenses": (ExpenseItem,"EXP","بنود المصروفات",[("name","اسم البند","text"),("description","البيان","text"),("is_active","نشط","bool")]),
+ "other_accounts": (OtherAccountItem,"ACC","بنود الحسابات الأخرى",[("name","اسم البند / نوع الإشعار","text"),("account_type","تصنيف الحساب","text"),("effect_sign","معامل التأثير (+1 أو -1)","number"),("description","البيان","text"),("is_active","نشط","bool")]),
+ "opening_stock": (OpeningStock,"STK","المخزون الافتتاحي",[("item_name","اسم الصنف","text"),("branch_id","الفرع","branch"),("quantity","الكمية","number"),("unit_cost","تكلفة الوحدة","number"),("notes","ملاحظات","text")]),
+}
+
 @app.get("/settings", response_class=HTMLResponse)
-def settings(request: Request, tab: str = "branches", db: Session = Depends(get_db)):
-    return render(request, "settings/index.html", "الإعدادات", "settings", tab=tab, branches=db.query(Branch).order_by(Branch.id.desc()).all(), employees=db.query(Employee).options(joinedload(Employee.branch)).order_by(Employee.id.desc()).all(), suppliers=db.query(Supplier).order_by(Supplier.id.desc()).all(), next_branch=next_code(db,Branch,"BR"), next_employee=next_code(db,Employee,"EM"), next_supplier=next_code(db,Supplier,"SU"), message=request.query_params.get("message", ""))
+def settings(request: Request, tab: str = "users", search: str = "", edit_id: Optional[int] = None, db: Session = Depends(get_db)):
+    if tab not in SETTINGS: tab="users"
+    model,prefix,title,fields=SETTINGS[tab]; query=db.query(model)
+    searchable=[model.code]+[getattr(model,n) for n,_,kind in fields if kind=="text"]
+    if search and searchable: query=query.filter(or_(*[x.ilike(f"%{search}%") for x in searchable]))
+    records=query.order_by(model.id.desc()).all(); editing=db.get(model,edit_id) if edit_id else None
+    tabs=[{"key":k,"title":v[2]} for k,v in SETTINGS.items()]
+    return render(request,"settings/index.html","الإعدادات","settings",tab=tab,tabs=tabs,title=title,fields=fields,records=records,editing=editing,next_value=next_code(db,model,prefix),branches=db.query(Branch).filter(Branch.is_active.is_(True)).order_by(Branch.name).all(),search=search,message=request.query_params.get("message",""))
 
-@app.post("/settings/branches/save")
-async def save_branch(request: Request, db: Session = Depends(get_db)):
-    f=await request.form(); name=str(f.get("name") or "").strip()
-    if not name: return RedirectResponse("/settings?tab=branches&message=أدخل اسم الفرع",303)
-    db.add(Branch(code=next_code(db,Branch,"BR"),name=name,is_active=bool(f.get("is_active")))); db.commit()
-    return RedirectResponse("/settings?tab=branches&message=تم حفظ الفرع",303)
+@app.post("/settings/{tab}/save")
+async def save_setting(tab: str, request: Request, db: Session = Depends(get_db)):
+    if tab not in SETTINGS: raise HTTPException(404)
+    model,prefix,_,fields=SETTINGS[tab]; form=await request.form(); record=db.get(model,int(form.get("id"))) if form.get("id") else model(code=next_code(db,model,prefix))
+    for name,_,kind in fields:
+        raw=form.get(name)
+        if kind=="bool": value=bool(raw)
+        elif kind=="number": value=float(raw or 0)
+        elif kind=="branch": value=int(raw or 0)
+        else: value=str(raw or "").strip()
+        setattr(record,name,value)
+    if not getattr(record,"id",None): db.add(record)
+    try: db.commit()
+    except IntegrityError:
+        db.rollback(); return RedirectResponse(f"/settings?tab={tab}&message=تعذر الحفظ، تحقق من عدم تكرار البيانات",303)
+    return RedirectResponse(f"/settings?tab={tab}&message=تم حفظ البيانات بنجاح",303)
 
-@app.post("/settings/employees/save")
-async def save_employee(request: Request, db: Session = Depends(get_db)):
-    f=await request.form(); name=str(f.get("name") or "").strip(); branch_id=int(f.get("branch_id") or 0)
-    if not name or not branch_id: return RedirectResponse("/settings?tab=employees&message=أدخل الاسم والفرع",303)
-    db.add(Employee(code=next_code(db,Employee,"EM"),name=name,job_title=str(f.get("job_title") or ""),branch_id=branch_id,is_active=bool(f.get("is_active")))); db.commit()
-    return RedirectResponse("/settings?tab=employees&message=تم حفظ الموظف",303)
-
-@app.post("/settings/suppliers/save")
-async def save_supplier(request: Request, db: Session = Depends(get_db)):
-    f=await request.form(); name=str(f.get("name") or "").strip()
-    if not name: return RedirectResponse("/settings?tab=suppliers&message=أدخل اسم المورد",303)
-    db.add(Supplier(code=next_code(db,Supplier,"SU"),name=name,phone=str(f.get("phone") or ""),opening_debit=float(f.get("opening_debit") or 0),opening_credit=float(f.get("opening_credit") or 0),is_active=bool(f.get("is_active")))); db.commit()
-    return RedirectResponse("/settings?tab=suppliers&message=تم حفظ المورد",303)
+@app.post("/settings/{tab}/{record_id}/delete")
+def delete_setting(tab: str, record_id: int, db: Session = Depends(get_db)):
+    if tab not in SETTINGS: raise HTTPException(404)
+    record=db.get(SETTINGS[tab][0],record_id)
+    if record:
+        try: db.delete(record); db.commit()
+        except IntegrityError: db.rollback(); return RedirectResponse(f"/settings?tab={tab}&message=لا يمكن حذف سجل مرتبط بحركات",303)
+    return RedirectResponse(f"/settings?tab={tab}&message=تم حذف البيانات",303)
 
 
 @app.get("/closing-stock", response_class=HTMLResponse)
@@ -131,7 +163,7 @@ def sales_entry(
     employees = db.query(Employee).filter(Employee.is_active.is_(True)).order_by(Employee.branch_id, Employee.name).all()
     journal = None
     if edit_id:
-        journal = db.query(SalesJournal).options(joinedload(SalesJournal.lines).joinedload(SalesLine.employee)).filter(SalesJournal.id == edit_id).first()
+        journal = db.query(SalesJournal).options(joinedload(SalesJournal.lines).joinedload(SalesLine.employee),joinedload(SalesJournal.treasury_deposit)).filter(SalesJournal.id == edit_id).first()
         if not journal:
             raise HTTPException(404, "اليومية غير موجودة")
 
@@ -148,7 +180,7 @@ def sales_entry(
 
     return render(
         request, "sales/index.html", "يومية المبيعات", "sales",
-        branches=branches, employees=employees, journal=journal, results=results,
+        branches=branches, employees=employees, treasuries=db.query(Treasury).filter(Treasury.is_active.is_(True)).order_by(Treasury.name).all(), journal=journal, results=results,
         is_readonly=bool(journal and journal.status == "posted"),
         today=date.today().isoformat(), selected_branch=selected_branch_id, search=search,
         selected_date=journal_date or "", message=request.query_params.get("message", ""),
@@ -162,9 +194,13 @@ async def save_sales(request: Request, db: Session = Depends(get_db)):
     journal_date = parse_date(str(form.get("journal_date") or ""), date.today())
     branch_id = int(form.get("branch_id") or 0)
     notes = str(form.get("notes") or "").strip()
+    treasury_id = int(form.get("treasury_id") or 0)
 
-    if not branch_id:
-        return RedirectResponse("/sales?message=يجب اختيار الفرع", status_code=303)
+    if not branch_id or not treasury_id:
+        return RedirectResponse("/sales?message=يجب اختيار الفرع والخزينة", status_code=303)
+    treasury=db.query(Treasury).filter(Treasury.id==treasury_id,Treasury.is_active.is_(True)).first()
+    if not treasury or treasury.branch_id!=branch_id:
+        return RedirectResponse("/sales?message=الخزينة المختارة لا تتبع الفرع",status_code=303)
 
     employee_ids = form.getlist("employee_id")
     shift_values = form.getlist("shift_value")
@@ -215,19 +251,27 @@ async def save_sales(request: Request, db: Session = Depends(get_db)):
     for employee_id, shift, discount, net_cash, difference in valid_lines:
         journal.lines.append(SalesLine(employee_id=employee_id, shift_value=shift, discount=discount, net_cash=net_cash, cash_difference=difference))
 
+    total_net=sum(line[3] for line in valid_lines)
+    if journal.treasury_deposit:
+        journal.treasury_deposit.treasury_id=treasury_id; journal.treasury_deposit.amount=total_net
+    else:
+        journal.treasury_deposit=TreasuryDeposit(treasury_id=treasury_id,amount=total_net)
+
     db.commit()
     return RedirectResponse("/sales?message=تم حفظ يومية المبيعات بنجاح", status_code=303)
 
 
 @app.get("/review", response_class=HTMLResponse)
-def unified_review(request: Request, type: str="sales", status: str="draft", db: Session=Depends(get_db)):
+def unified_review(request: Request, type: str="sales", db: Session=Depends(get_db)):
+    allowed={"sales","purchases","expenses","other_accounts","supplier_payments"}
+    if type not in allowed:type="sales"
     if type=="purchases":
         all_items=db.query(PurchaseJournal).options(joinedload(PurchaseJournal.lines).joinedload(PurchaseLine.supplier)).order_by(PurchaseJournal.journal_date.desc(),PurchaseJournal.id.desc()).all()
-    else:
-        type="sales"; all_items=db.query(SalesJournal).options(joinedload(SalesJournal.branch),joinedload(SalesJournal.lines).joinedload(SalesLine.employee)).order_by(SalesJournal.journal_date.desc(),SalesJournal.id.desc()).all()
-    items=[x for x in all_items if status=="all" or x.status==status]
-    totals={"all":len(all_items),"draft":sum(x.status=="draft" for x in all_items),"posted":sum(x.status=="posted" for x in all_items),"shown":len(items)}
-    return render(request,"sales/review.html","مراجعة وترحيل","review",journals=items,totals=totals,selected_type=type,selected_status=status,message=request.query_params.get("message",""))
+    elif type=="sales":all_items=db.query(SalesJournal).options(joinedload(SalesJournal.branch),joinedload(SalesJournal.lines).joinedload(SalesLine.employee)).order_by(SalesJournal.journal_date.desc(),SalesJournal.id.desc()).all()
+    else:all_items=[]
+    items=[x for x in all_items if x.status=="draft"]
+    totals={"draft":len(items),"lines":sum(len(x.lines) for x in items),"value":sum((x.total_net_cash if type=="sales" else x.total_effect) for x in items)}
+    return render(request,"sales/review.html","مراجعة وترحيل","review",journals=items,totals=totals,selected_type=type,message=request.query_params.get("message",""))
 
 @app.get("/sales/review")
 def sales_review_redirect():
@@ -246,38 +290,34 @@ def post_sales(journal_id: int, db: Session = Depends(get_db)):
     return RedirectResponse("/review?message=تم ترحيل اليومية بنجاح", status_code=303)
 
 
-@app.get("/reports/sales", response_class=HTMLResponse)
-def sales_report(
-    request: Request,
-    branch_id: Optional[int] = None,
-    employee_id: Optional[int] = None,
-    date_from: Optional[str] = None,
-    date_to: Optional[str] = None,
-    status: str = "all",
-    db: Session = Depends(get_db),
-):
-    branches = db.query(Branch).filter(Branch.is_active.is_(True)).order_by(Branch.code).all()
-    employees = db.query(Employee).filter(Employee.is_active.is_(True)).order_by(Employee.name).all()
-    query = db.query(SalesLine).join(SalesJournal).options(joinedload(SalesLine.employee), joinedload(SalesLine.journal).joinedload(SalesJournal.branch))
-    if branch_id:
-        query = query.filter(SalesJournal.branch_id == branch_id)
-    if employee_id:
-        query = query.filter(SalesLine.employee_id == employee_id)
-    if date_from:
-        query = query.filter(SalesJournal.journal_date >= parse_date(date_from))
-    if date_to:
-        query = query.filter(SalesJournal.journal_date <= parse_date(date_to))
-    if status in {"draft", "posted"}:
-        query = query.filter(SalesJournal.status == status)
-    lines = query.order_by(SalesJournal.journal_date.desc(), SalesJournal.id.desc(), SalesLine.id).all()
-    totals = {
-        "shifts": len(lines), "sales": sum(x.shift_value for x in lines),
-        "discount": sum(x.discount for x in lines), "net": sum(x.net_cash for x in lines),
-        "difference": sum(x.cash_difference for x in lines),
-    }
-    filters = {"branch_id": branch_id, "employee_id": employee_id, "date_from": date_from or "", "date_to": date_to or "", "status": status}
-    return render(request, "reports/sales.html", "تقرير المبيعات", "sales_report", branches=branches, employees=employees, lines=lines, totals=totals, filters=filters)
+@app.get("/reports",response_class=HTMLResponse)
+def unified_reports(request:Request,tab:str="sales",branch_id:Optional[int]=None,employee_id:Optional[int]=None,supplier_id:Optional[int]=None,date_from:Optional[str]=None,date_to:Optional[str]=None,status:str="all",journal_no:str="",document_no:str="",db:Session=Depends(get_db)):
+    allowed={"sales","purchases","expenses","other_accounts","supplier_payments"}; tab=tab if tab in allowed else "sales"
+    filters={"branch_id":branch_id,"employee_id":employee_id,"supplier_id":supplier_id,"date_from":date_from or "","date_to":date_to or "","status":status,"journal_no":journal_no,"document_no":document_no}
+    if tab=="sales":
+        q=db.query(SalesLine).join(SalesJournal).options(joinedload(SalesLine.employee),joinedload(SalesLine.journal).joinedload(SalesJournal.branch))
+        if branch_id:q=q.filter(SalesJournal.branch_id==branch_id)
+        if employee_id:q=q.filter(SalesLine.employee_id==employee_id)
+        if journal_no:q=q.filter(SalesJournal.journal_no.contains(journal_no))
+        if date_from:q=q.filter(SalesJournal.journal_date>=parse_date(date_from))
+        if date_to:q=q.filter(SalesJournal.journal_date<=parse_date(date_to))
+        if status in {"draft","posted"}:q=q.filter(SalesJournal.status==status)
+        lines=q.order_by(SalesJournal.journal_date.desc(),SalesLine.id.desc()).all(); totals=[("الورديات",len(lines)),("المبيعات",sum(x.shift_value for x in lines)),("الخصومات",sum(x.discount for x in lines)),("فروق الخزينة",sum(x.cash_difference for x in lines)),("صافي النقدية",sum(x.net_cash for x in lines))]
+    elif tab=="purchases":
+        q=db.query(PurchaseLine).join(PurchaseJournal).options(joinedload(PurchaseLine.supplier),joinedload(PurchaseLine.journal))
+        if supplier_id:q=q.filter(PurchaseLine.supplier_id==supplier_id)
+        if journal_no:q=q.filter(PurchaseJournal.journal_no.contains(journal_no))
+        if document_no:q=q.filter(PurchaseLine.document_no.contains(document_no))
+        if date_from:q=q.filter(PurchaseJournal.journal_date>=parse_date(date_from))
+        if date_to:q=q.filter(PurchaseJournal.journal_date<=parse_date(date_to))
+        if status in {"draft","posted"}:q=q.filter(PurchaseJournal.status==status)
+        lines=q.order_by(PurchaseJournal.journal_date.desc(),PurchaseLine.id.desc()).all(); totals=[("الحركات",len(lines)),("القيمة صيدلي",sum(x.pharmacy_value for x in lines)),("القيمة جمهور",sum(x.public_value for x in lines)),("تأثير المورد",sum(x.account_effect for x in lines))]
+    else:lines=[]; totals=[("الحركات",0),("الإجمالي",0),("المرحل",0),("غير المرحل",0)]
+    return render(request,"reports/unified.html","التقارير","reports",tab=tab,lines=lines,totals=totals,filters=filters,branches=db.query(Branch).order_by(Branch.name).all(),employees=db.query(Employee).order_by(Employee.name).all(),suppliers=db.query(Supplier).order_by(Supplier.name).all())
 
+@app.get("/reports/sales")
+def sales_report_redirect():
+    return RedirectResponse("/reports?tab=sales",status_code=303)
 
 def report_lines_query(db: Session, branch_id=None, employee_id=None, date_from=None, date_to=None, status="all"):
     query = db.query(SalesLine).join(SalesJournal).options(joinedload(SalesLine.employee), joinedload(SalesLine.journal).joinedload(SalesJournal.branch))
@@ -335,13 +375,14 @@ def next_purchase_no(db: Session, d: date) -> str:
     prefix=f"PJ-{d.year}-"; last=db.query(func.max(PurchaseJournal.journal_no)).filter(PurchaseJournal.journal_no.like(f"{prefix}%")).scalar(); seq=int(last.rsplit("-",1)[-1])+1 if last else 1; return f"{prefix}{seq:05d}"
 
 @app.get("/purchases", response_class=HTMLResponse)
-def purchases(request: Request, edit_id: Optional[int]=None, search: str="", status: str="all", db: Session=Depends(get_db)):
+def purchases(request: Request, edit_id: Optional[int]=None, search: str="", status: str="all", journal_date:Optional[str]=None, db: Session=Depends(get_db)):
     journal=db.query(PurchaseJournal).options(joinedload(PurchaseJournal.lines).joinedload(PurchaseLine.supplier)).filter(PurchaseJournal.id==edit_id).first() if edit_id else None
     q=db.query(PurchaseJournal).options(joinedload(PurchaseJournal.lines).joinedload(PurchaseLine.supplier))
-    if search: q=q.join(PurchaseLine).filter((PurchaseJournal.journal_no.contains(search)) | (PurchaseLine.document_no.contains(search)) | (Supplier.name.contains(search)))
+    if search: q=q.join(PurchaseLine).join(Supplier).filter((PurchaseJournal.journal_no.contains(search)) | (PurchaseLine.document_no.contains(search)) | (Supplier.name.contains(search)))
+    if journal_date:q=q.filter(PurchaseJournal.journal_date==parse_date(journal_date))
     if status in {"draft","posted"}: q=q.filter(PurchaseJournal.status==status)
-    results=q.order_by(PurchaseJournal.journal_date.desc(),PurchaseJournal.id.desc()).limit(20).all() if search else []
-    return render(request,"purchases/index.html","يومية المشتريات","purchases",suppliers=db.query(Supplier).filter(Supplier.is_active.is_(True)).order_by(Supplier.name).all(),journal=journal,results=results,today=date.today().isoformat(),readonly=bool(journal and journal.status=="posted"),message=request.query_params.get("message",""))
+    results=q.order_by(PurchaseJournal.journal_date.desc(),PurchaseJournal.id.desc()).limit(20).all() if search or journal_date or status in {"draft","posted"} else []
+    return render(request,"purchases/index.html","يومية المشتريات","purchases",suppliers=db.query(Supplier).filter(Supplier.is_active.is_(True)).order_by(Supplier.name).all(),notice_types=db.query(OtherAccountItem).filter(OtherAccountItem.is_active.is_(True)).order_by(OtherAccountItem.name).all(),journal=journal,results=results,today=date.today().isoformat(),readonly=bool(journal and journal.status=="posted"),search=search,selected_status=status,selected_date=journal_date or "",message=request.query_params.get("message",""))
 
 @app.post("/purchases/save")
 async def save_purchases(request: Request, db: Session=Depends(get_db)):
@@ -350,8 +391,12 @@ async def save_purchases(request: Request, db: Session=Depends(get_db)):
     rows=[]
     for i,sid in enumerate(supplier_ids):
         if not sid or not docs[i].strip(): continue
-        pv=float(pvs[i] or 0); pub=float(pubs[i] or 0); disc=((pub-pv)/pub*100) if pub else 0; effect=float(effects[i] or (pv if et=="purchase" else 0))
-        rows.append((int(sid),docs[i].strip(),nts[i] if i<len(nts) else "",pv,pub,max(disc,0),effect,descs[i] if i<len(descs) else "",notes[i] if i<len(notes) else ""))
+        pv=float(pvs[i] or 0); pub=float(pubs[i] or 0); disc=((pub-pv)/pub*100) if pub else 0; nt=""; effect=pv
+        if et=="notice":
+            notice=db.get(OtherAccountItem,int(nts[i] or 0)) if i<len(nts) and str(nts[i]).isdigit() else None
+            if not notice:return RedirectResponse("/purchases?message=اختر نوع إشعار معرفاً في الإعدادات",303)
+            nt=notice.name; effect=abs(float(effects[i] or 0)) * (1 if notice.effect_sign>=0 else -1)
+        rows.append((int(sid),docs[i].strip(),nt,pv,pub,max(disc,0),effect,descs[i] if i<len(descs) else "",notes[i] if i<len(notes) else ""))
     if not rows: return RedirectResponse("/purchases?message=أدخل حركة واحدة على الأقل",303)
     for sid,doc,*_ in rows:
         dup=db.query(PurchaseLine).filter(PurchaseLine.supplier_id==sid,PurchaseLine.document_no==doc,PurchaseLine.entry_type==et)
@@ -372,17 +417,9 @@ def post_purchase(journal_id:int,db:Session=Depends(get_db)):
     if not j: raise HTTPException(404,"اليومية غير موجودة")
     j.status="posted"; j.posted_at=datetime.utcnow(); db.commit(); return RedirectResponse("/review?type=purchases&message=تم الترحيل",303)
 
-@app.get("/reports/purchases",response_class=HTMLResponse)
-def purchase_report(request:Request,supplier_id:Optional[int]=None,entry_type:str="all",status:str="all",document_no:str="",date_from:Optional[str]=None,date_to:Optional[str]=None,db:Session=Depends(get_db)):
-    q=db.query(PurchaseLine).join(PurchaseJournal).options(joinedload(PurchaseLine.supplier),joinedload(PurchaseLine.journal))
-    if supplier_id:q=q.filter(PurchaseLine.supplier_id==supplier_id)
-    if entry_type in {"purchase","notice"}:q=q.filter(PurchaseLine.entry_type==entry_type)
-    if status in {"draft","posted"}:q=q.filter(PurchaseJournal.status==status)
-    if document_no:q=q.filter(PurchaseLine.document_no.contains(document_no))
-    if date_from:q=q.filter(PurchaseJournal.journal_date>=parse_date(date_from))
-    if date_to:q=q.filter(PurchaseJournal.journal_date<=parse_date(date_to))
-    lines=q.order_by(PurchaseJournal.journal_date.desc(),PurchaseLine.id.desc()).all(); totals={"count":len(lines),"pharmacy":sum(x.pharmacy_value for x in lines),"public":sum(x.public_value for x in lines),"effect":sum(x.account_effect for x in lines)}
-    return render(request,"reports/purchases.html","تقرير المشتريات","purchase_report",suppliers=db.query(Supplier).order_by(Supplier.name).all(),lines=lines,totals=totals,filters=locals())
+@app.get("/reports/purchases")
+def purchase_report_redirect():
+    return RedirectResponse("/reports?tab=purchases",status_code=303)
 
 @app.get("/reports/purchases/export")
 def export_purchases(supplier_id:Optional[int]=None,entry_type:str="all",status:str="all",document_no:str="",date_from:Optional[str]=None,date_to:Optional[str]=None,db:Session=Depends(get_db)):
