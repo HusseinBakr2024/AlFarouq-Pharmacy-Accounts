@@ -1,124 +1,39 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="workspace sales-workspace compact-sales-page">
-    {% if message %}<div class="alert-success">{{ message }}</div>{% endif %}
-
-    <section class="entry-card compact-entry-card {% if is_readonly %}readonly-journal{% endif %}">
-        <form method="post" action="/sales/save" id="salesJournalForm" data-readonly="{{ '1' if is_readonly else '0' }}">
-            <input type="hidden" name="journal_id" value="{{ journal.id if journal else '' }}">
-
-            <div class="sales-command-bar">
-                <div class="sales-command-title">
-                    <h2>تسجيل يومية المبيعات</h2>
-                    <span class="journal-state {{ 'posted' if is_readonly else 'draft' }}">{{ 'مرحلة' if is_readonly else 'غير مرحلة' }}</span>
-                </div>
-
-                <div class="sales-head-controls">
-                    <div class="compact-control journal-number-control">
-                        <label>رقم اليومية</label>
-                        <input type="text" value="{{ journal.journal_no if journal else 'تلقائي' }}" readonly>
-                    </div>
-                    <div class="compact-control">
-                        <label>التاريخ</label>
-                        <input type="date" name="journal_date" required value="{{ journal.journal_date.isoformat() if journal else today }}" {% if is_readonly %}disabled{% endif %}>
-                    </div>
-                    <div class="compact-control branch-control">
-                        <label>الفرع</label>
-                        <select name="branch_id" id="salesBranch" required {% if is_readonly %}disabled{% endif %}>
-                            <option value="">اختر الفرع</option>
-                            {% for branch in branches %}
-                            <option value="{{ branch.id }}" {% if journal and journal.branch_id == branch.id %}selected{% endif %}>{{ branch.name }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                </div>
-
-                <div class="title-metrics" id="salesMetrics">
-                    <span>الورديات <b id="metricRows">0</b></span>
-                    <span>المبيعات <b id="metricShift">0.00</b></span>
-                    <span>الخصم <b id="metricDiscount">0.00</b></span>
-                    <span>الفروق <b id="metricDifference">0.00</b></span>
-                    <span>صافي النقدية <b id="metricNet">0.00</b></span>
-                </div>
-            </div>
-
-            <div class="table-shell sales-entry-table-shell">
-                <table class="data-table sales-entry-table" id="salesEntryTable">
-                    <thead>
-                        <tr>
-                            <th class="index-col">م</th>
-                            <th>اسم المستخدم</th>
-                            <th>قيمة الوردية</th>
-                            <th>الخصم</th>
-                            <th>فروق الخزينة</th>
-                            <th>صافي النقدية</th>
-                            {% if not is_readonly %}<th class="action-col"></th>{% endif %}
-                        </tr>
-                    </thead>
-                    <tbody>
-                    {% set rows = journal.lines if journal and journal.lines else [None] %}
-                    {% for line in rows %}
-                        <tr>
-                            <td class="row-number">{{ loop.index }}</td>
-                            <td>
-                                <select name="employee_id" class="employee-select" required {% if is_readonly %}disabled{% endif %}>
-                                    <option value="">اختر المستخدم</option>
-                                    {% for employee in employees %}
-                                    <option value="{{ employee.id }}" data-branch="{{ employee.branch_id }}" {% if line and line.employee_id == employee.id %}selected{% endif %}>{{ employee.name }}</option>
-                                    {% endfor %}
-                                </select>
-                            </td>
-                            <td><input class="money-input shift-value" type="number" name="shift_value" min="0" step="0.01" value="{{ '%.2f'|format(line.shift_value) if line else '' }}" {% if is_readonly %}readonly{% endif %}></td>
-                            <td><input class="money-input discount-value" type="number" name="discount" min="0" step="0.01" value="{{ '%.2f'|format(line.discount) if line else '' }}" {% if is_readonly %}readonly{% endif %}></td>
-                            <td><input class="money-input difference-value" type="number" name="cash_difference" step="0.01" value="{{ '%.2f'|format(line.cash_difference) if line else '' }}" {% if is_readonly %}readonly{% endif %}></td>
-                            <td><input class="money-input net-value" type="number" name="net_cash" step="0.01" value="{{ '%.2f'|format(line.net_cash) if line else '' }}" readonly></td>
-                            {% if not is_readonly %}<td><button type="button" class="icon-button danger remove-row" title="حذف السطر"><i class="fa-solid fa-trash"></i></button></td>{% endif %}
-                        </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="journal-footer-actions compact-footer-actions">
-                <div class="form-field notes-field">
-                    <label>ملاحظات</label>
-                    <input type="text" name="notes" value="{{ journal.notes if journal else '' }}" placeholder="ملاحظات اختيارية" {% if is_readonly %}readonly{% endif %}>
-                </div>
-                <div class="action-group">
-                    {% if not is_readonly %}
-                    <button type="button" class="secondary-button" id="addSalesRow"><i class="fa-solid fa-plus"></i> إضافة وردية</button>
-                    <button type="button" class="primary-button save-journal-button" id="openTreasuryDialog"><i class="fa-solid fa-floppy-disk"></i> حفظ اليومية</button>
-                    {% endif %}
-                    {% if journal %}<a class="secondary-button" href="/sales"><i class="fa-solid fa-file-circle-plus"></i> يومية جديدة</a>{% endif %}
-                </div>
-            </div>
-        </form>
-        {% if not is_readonly %}<dialog class="erp-dialog" id="treasuryDialog"><div class="dialog-title"><i class="fa-solid fa-vault"></i><div><b>إيداع صافي النقدية</b><small>اختر خزينة الفرع قبل حفظ اليومية</small></div></div><div class="form-field"><label>الخزينة</label><select name="treasury_picker" id="treasuryPicker" required><option value="">اختر الخزينة</option>{% for treasury in treasuries %}<option value="{{treasury.id}}" data-branch="{{treasury.branch_id}}" {% if journal and journal.treasury_deposit and journal.treasury_deposit.treasury_id==treasury.id %}selected{% endif %}>{{treasury.code}} — {{treasury.name}}</option>{% endfor %}</select></div><div class="dialog-total">صافي المبلغ <strong id="dialogNet">0.00</strong></div><div class="dialog-actions"><button type="button" class="secondary-button" id="closeTreasuryDialog">إلغاء</button><button type="button" class="primary-button" id="confirmSalesSave">تأكيد وحفظ</button></div></dialog>{% endif %}
-    </section>
-
-    <section class="journal-search-card compact-search-card">
-        <form method="get" action="/sales" class="journal-search-form">
-            <input type="search" name="search" value="{{ search }}" placeholder="رقم اليومية">
-            <select name="branch_id">
-                <option value="">كل الفروع</option>
-                {% for branch in branches %}<option value="{{ branch.id }}" {% if selected_branch == branch.id %}selected{% endif %}>{{ branch.name }}</option>{% endfor %}
-            </select>
-            <input type="date" name="journal_date" value="{{ selected_date }}">
-            <button class="secondary-button" type="submit"><i class="fa-solid fa-magnifying-glass"></i> بحث</button>
-            {% if search or selected_branch or selected_date %}<a class="secondary-button" href="/sales">مسح</a>{% endif %}
-        </form>
-        {% if results %}
-        <div class="search-results-inline">
-            {% for item in results %}
-            <a href="/sales?edit_id={{ item.id }}" class="journal-result-pill">
-                <b>{{ item.journal_no }}</b><span>{{ item.journal_date.strftime('%d/%m/%Y') }}</span><span>{{ item.branch.name }}</span>
-                <em class="{{ item.status }}">{{ 'مرحلة' if item.status == 'posted' else 'غير مرحلة' }}</em>
-            </a>
-            {% endfor %}
-        </div>
-        {% elif search or selected_branch or selected_date %}
-        <div class="no-search-results">لا توجد يوميات مطابقة.</div>
-        {% endif %}
-    </section>
+<div class="workspace journal-layout-page">
+{% if message %}<div class="alert-success">{{ message }}</div>{% endif %}
+<div class="journal-two-column">
+<aside class="journal-browser">
+  <form method="get" action="/sales" class="journal-browser-search">
+    <label>بحث في اليوميات</label>
+    <input type="search" name="search" value="{{ search }}" placeholder="رقم اليومية">
+    <select name="branch_id"><option value="">كل الفروع</option>{% for branch in branches %}<option value="{{ branch.id }}" {% if selected_branch == branch.id %}selected{% endif %}>{{ branch.name }}</option>{% endfor %}</select>
+    <input type="text" placeholder="dd/MM/yyyy" name="journal_date" value="{{ selected_date }}">
+    <div class="browser-search-actions"><button class="primary-button" type="submit"><i class="fa-solid fa-magnifying-glass"></i> بحث</button><a class="secondary-button" href="/sales">مسح</a></div>
+  </form>
+  <div class="journal-browser-title"><b>اليوميات</b><span>{{ results|length }}</span></div>
+  <div class="journal-browser-list">
+  {% for item in results %}
+    <a href="/sales?edit_id={{ item.id }}" class="journal-browser-item {% if journal and journal.id==item.id %}active{% endif %}">
+      <div><b>{{ item.journal_no }}</b><small>{{ item.journal_date.strftime('%d/%m/%Y') }} — {{ item.branch.name }}</small></div>
+      <em class="{{ item.status }}">{{ 'مرحلة' if item.status == 'posted' else 'غير مرحلة' }}</em>
+    </a>
+  {% else %}<div class="browser-empty">لا توجد يوميات.</div>{% endfor %}
+  </div>
+</aside>
+<section class="entry-card journal-entry-panel {% if is_readonly %}readonly-journal{% endif %}">
+<form method="post" action="/sales/save" id="salesJournalForm" data-readonly="{{ '1' if is_readonly else '0' }}" class="journal-entry-form">
+<input type="hidden" name="journal_id" value="{{ journal.id if journal else '' }}">
+<div class="title-metrics metrics-row" id="salesMetrics"><span>الورديات <b id="metricRows">0</b></span><span>المبيعات <b id="metricShift">0.00</b></span><span>الخصم <b id="metricDiscount">0.00</b></span><span>الفروق <b id="metricDifference">0.00</b></span><span>صافي النقدية <b id="metricNet">0.00</b></span></div><div class="journal-top-strip">
+ <div class="sales-command-title"><h2>تسجيل يومية المبيعات</h2><span class="journal-state {{ 'posted' if is_readonly else 'draft' }}">{{ 'مرحلة' if is_readonly else 'غير مرحلة' }}</span></div>
+ <div class="sales-head-controls"><div class="compact-control"><label>رقم اليومية</label><input value="{{ journal.journal_no if journal else 'تلقائي' }}" readonly></div><div class="compact-control"><label>التاريخ</label><input type="text" placeholder="dd/MM/yyyy" name="journal_date" required value="{{ journal.journal_date.strftime('%d/%m/%Y') if journal else today }}" {% if is_readonly %}disabled{% endif %}></div><div class="compact-control branch-control"><label>الفرع</label><select name="branch_id" id="salesBranch" required {% if is_readonly %}disabled{% endif %}><option value="">اختر الفرع</option>{% for branch in branches %}<option value="{{ branch.id }}" {% if journal and journal.branch_id == branch.id %}selected{% endif %}>{{ branch.name }}</option>{% endfor %}</select></div></div>
+ 
 </div>
+<div class="table-shell journal-scroll-area"><table class="data-table sales-entry-table" id="salesEntryTable"><thead><tr><th class="index-col">م</th><th>اسم المستخدم</th><th>قيمة الوردية</th><th>الخصم</th><th>فروق الخزينة</th><th>صافي النقدية</th>{% if not is_readonly %}<th class="action-col"></th>{% endif %}</tr></thead><tbody>
+{% set rows = journal.lines if journal and journal.lines else [None] %}{% for line in rows %}<tr><td class="row-number">{{ loop.index }}</td><td><select name="employee_id" class="employee-select" required {% if is_readonly %}disabled{% endif %}><option value="">اختر المستخدم</option>{% for employee in employees %}<option value="{{ employee.id }}" data-branch="{{ employee.branch_id }}" {% if line and line.employee_id == employee.id %}selected{% endif %}>{{ employee.name }}</option>{% endfor %}</select></td><td><input class="money-input shift-value" type="number" name="shift_value" min="0" step="0.01" value="{{ '%.2f'|format(line.shift_value) if line else '' }}" {% if is_readonly %}readonly{% endif %}></td><td><input class="money-input discount-value" type="number" name="discount" min="0" step="0.01" value="{{ '%.2f'|format(line.discount) if line else '' }}" {% if is_readonly %}readonly{% endif %}></td><td><input class="money-input difference-value" type="number" name="cash_difference" step="0.01" value="{{ '%.2f'|format(line.cash_difference) if line else '' }}" {% if is_readonly %}readonly{% endif %}></td><td><input class="money-input net-value" type="number" name="net_cash" step="0.01" value="{{ '%.2f'|format(line.net_cash) if line else '' }}" readonly></td>{% if not is_readonly %}<td><button type="button" class="icon-button danger remove-row"><i class="fa-solid fa-trash"></i></button></td>{% endif %}</tr>{% endfor %}
+</tbody></table></div>
+<div class="journal-fixed-actions"><div class="form-field notes-field"><label>ملاحظات</label><input type="text" name="notes" value="{{ journal.notes if journal else '' }}" placeholder="ملاحظات اختيارية" {% if is_readonly %}readonly{% endif %}></div><div class="action-group">{% if not is_readonly %}<button type="button" class="secondary-button" id="addSalesRow"><i class="fa-solid fa-plus"></i> إضافة وردية</button><button type="button" class="primary-button" id="openTreasuryDialog"><i class="fa-solid fa-floppy-disk"></i> حفظ اليومية</button>{% endif %}{% if journal %}<a class="secondary-button" href="/sales">يومية جديدة</a>{% endif %}</div></div>
+</form>
+{% if not is_readonly %}<dialog class="erp-dialog" id="treasuryDialog"><div class="dialog-title"><i class="fa-solid fa-vault"></i><div><b>إيداع صافي النقدية</b><small>اختر خزينة الفرع قبل حفظ اليومية</small></div></div><div class="form-field"><label>الخزينة</label><select name="treasury_picker" id="treasuryPicker" required><option value="">اختر الخزينة</option>{% for treasury in treasuries %}<option value="{{treasury.id}}" data-branch="{{treasury.branch_id}}" {% if journal and journal.treasury_deposit and journal.treasury_deposit.treasury_id==treasury.id %}selected{% endif %}>{{treasury.code}} — {{treasury.name}}</option>{% endfor %}</select></div><div class="dialog-total">صافي المبلغ <strong id="dialogNet">0.00</strong></div><div class="dialog-actions"><button type="button" class="secondary-button" id="closeTreasuryDialog">إلغاء</button><button type="button" class="primary-button" id="confirmSalesSave">تأكيد وحفظ</button></div></dialog>{% endif %}
+</section></div></div>
 {% endblock %}

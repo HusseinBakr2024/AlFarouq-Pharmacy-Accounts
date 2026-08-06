@@ -1411,10 +1411,165 @@ body.sidebar-collapsed .menu-link { position: relative; }
 @media(max-width:700px){.settings-workspace{height:auto}.settings-titlebar p{display:none}.settings-body,.settings-body.sidebar-folded{grid-template-columns:58px minmax(0,1fr)}.settings-sidebar-head span,.settings-tabs-vertical .settings-tab span,.settings-tab-arrow,.settings-integration-note span{display:none}.settings-tabs-vertical .settings-tab{grid-template-columns:1fr;padding:9px}.settings-sidebar-head button{display:none}.settings-editor{grid-template-columns:1fr}.settings-single-panel{overflow:visible;padding:10px}.settings-table-head{align-items:stretch;flex-direction:column;gap:6px}.settings-search input{width:100%}}
 /* Full-screen ERP journals, review and reporting */
 .erp-dialog{border:0;border-radius:16px;padding:20px;width:min(430px,90vw);box-shadow:0 25px 70px rgba(16,45,39,.28);direction:rtl}.erp-dialog::backdrop{background:rgba(9,32,27,.5)}.dialog-title{display:flex;gap:12px;align-items:center;margin-bottom:18px;color:#174d42}.dialog-title i{font-size:25px}.dialog-title small{display:block;color:#778783;margin-top:4px}.dialog-total{display:flex;justify-content:space-between;background:#edf6f3;padding:12px;border-radius:8px;margin:12px 0}.dialog-total strong{color:#176b59;font-size:19px}.dialog-actions{display:flex;justify-content:flex-end;gap:8px}
-.purchase-workspace.notice-mode .purchase-only{display:none}.purchase-workspace:not(.notice-mode) .notice-only{display:none}.purchase-command-bar{grid-template-columns:auto minmax(400px,1fr) auto}.purchase-grid input,.purchase-grid select{width:100%;min-width:125px;height:38px;border:1px solid #d7e1de;border-radius:6px;padding:5px}.purchase-grid td{padding:5px}.purchase-search{grid-template-columns:minmax(250px,2fr) 160px 160px auto auto!important}
+.purchase-workspace.notice-mode .purchase-only{display:none}.purchase-workspace.notice-mode .notice-only{display:table-cell}.purchase-workspace:not(.notice-mode) .notice-only{display:none}.purchase-command-bar{grid-template-columns:auto minmax(400px,1fr) auto}.purchase-grid input,.purchase-grid select{width:100%;min-width:125px;height:38px;border:1px solid #d7e1de;border-radius:6px;padding:5px}.purchase-grid td{padding:5px}.purchase-search{grid-template-columns:minmax(250px,2fr) 160px 160px auto auto!important}
 .erp-full-page{height:calc(100vh - 104px);display:flex;flex-direction:column;gap:10px;min-height:0}.erp-page-head{display:flex;justify-content:space-between;align-items:center;background:linear-gradient(135deg,#123e36,#1d6455);color:#fff;border-radius:13px;padding:12px 17px}.erp-page-head h2{font-size:19px;margin:0}.erp-page-head p{font-size:12px;color:#d8ebe6;margin:3px 0 0}.erp-tabs{display:flex;gap:5px;padding:6px;background:#fff;border:1px solid #dfe8e5;border-radius:10px;overflow-x:auto}.erp-tabs a{padding:9px 15px;white-space:nowrap;text-decoration:none;color:#49645e;border-radius:7px;font-size:13px}.erp-tabs a.active{background:#176b59;color:#fff}.review-grid-head,.erp-review-row{display:grid;grid-template-columns:1.1fr 1fr 1.5fr .6fr 1fr 2fr;gap:10px;align-items:center}.review-grid-head{padding:8px 14px;background:#edf3f1;color:#4f6862;font-size:12px;border-radius:8px}.erp-review-row{margin:0 0 6px;padding:9px 14px}.review-list{overflow:auto;min-height:0}.erp-review-row .review-actions{justify-content:flex-end}.erp-review-row .review-actions button,.erp-review-row .review-actions a{padding:7px 10px}
 .unified-report-page .erp-page-head{flex:none}.excel-button{background:#168451}.erp-filter-bar{display:flex;gap:7px;align-items:end;background:#fff;border:1px solid #dfe8e5;border-radius:10px;padding:8px;overflow-x:auto}.erp-filter-bar>div{min-width:135px;flex:1}.erp-filter-bar label{display:block;font-size:11px;color:#5c716c;margin-bottom:3px}.erp-filter-bar input,.erp-filter-bar select{width:100%;height:35px;border:1px solid #d6e1de;border-radius:6px;padding:5px}.erp-filter-bar>a,.erp-filter-bar>button{height:35px;white-space:nowrap}.erp-metrics{display:grid;grid-template-columns:repeat(5,1fr);gap:7px}.erp-metrics div{background:#fff;border:1px solid #dfe8e5;border-right:4px solid #176b59;border-radius:8px;padding:7px 11px}.erp-metrics span{display:block;color:#71827e;font-size:11px}.erp-metrics strong{color:#174d42;font-size:17px}.erp-report-table{flex:1;min-height:0;overflow:auto;border:1px solid #dfe8e5;border-radius:9px}.erp-report-table .data-table{margin:0}.erp-report-table thead{position:sticky;top:0;z-index:2}
 @media(max-width:900px){.purchase-command-bar{grid-template-columns:1fr}.review-grid-head{display:none}.erp-review-row{grid-template-columns:1fr 1fr}.erp-filter-bar{flex-wrap:wrap}.erp-metrics{grid-template-columns:repeat(2,1fr)}.erp-full-page{height:auto}}
 .inline-check{display:flex;align-items:center;gap:8px;align-self:end;min-height:42px}.inline-check input{width:17px;height:17px}.data-table-wrap{overflow:auto;margin-top:18px;border:1px solid var(--border);border-radius:12px}.data-table{width:100%;border-collapse:collapse;background:#fff;font-size:13px}.data-table th,.data-table td{padding:10px 12px;border-bottom:1px solid var(--border);text-align:center;white-space:nowrap}.data-table th{background:#f3f5f8;color:#26364a}.message{padding:10px 14px;border-radius:9px;margin-bottom:10px}.message.success{background:#e8f7ef;color:#17603a}
 .journal-shell{display:flex;flex-direction:column;gap:10px}.journal-toolbar,.review-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px}.compact-search,.review-toolbar form,.report-filters{display:flex;gap:8px;flex-wrap:wrap}.compact-search input{width:280px}.journal-head{display:grid;grid-template-columns:160px 150px 170px repeat(3,minmax(130px,1fr));gap:8px;align-items:end;background:#fff;padding:10px;border:1px solid var(--border);border-radius:12px}.metric-chip{height:55px;border-radius:9px;padding:7px 12px;background:#f5f0ff;border:1px solid #e3d7ff;display:flex;flex-direction:column}.metric-chip span{font-size:11px;color:#6c5a8d}.metric-chip strong{font-size:19px;color:#5b21b6}.entry-grid-wrap{overflow:auto;border:1px solid var(--border);border-radius:12px;background:#fff}.entry-grid{width:100%;border-collapse:collapse;table-layout:auto}.entry-grid th{background:#6d28d9;color:#fff;padding:10px 7px;white-space:nowrap}.entry-grid td{padding:5px;border-bottom:1px solid #ece7f6}.entry-grid input,.entry-grid select,.report-filters input,.report-filters select,.review-toolbar select,.compact-search input,.compact-search select{width:100%;height:38px;border:1px solid #d7dce3;border-radius:7px;padding:6px;font-family:inherit}.row-delete{border:0;background:#fff0f0;color:#b42318;border-radius:6px;font-size:18px}.journal-footer-actions{display:flex;justify-content:space-between;align-items:center}.purchase-save{background:#6d28d9;border-color:#6d28d9}.notice-only{display:none}body.notice-mode .notice-only{display:table-cell}body.notice-mode .purchase-only{display:none}.review-stats{display:flex;gap:8px;flex-wrap:wrap}.review-stats span{background:#fff;border:1px solid var(--border);padding:8px 12px;border-radius:8px}.review-row{display:grid;grid-template-columns:220px 1fr auto;align-items:center;gap:15px;background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-top:8px}.review-row>div:first-child{display:flex;gap:12px}.review-actions{display:flex;gap:7px;align-items:center}.review-actions form{margin:0}.status-posted{color:#17603a;background:#e8f7ef;padding:7px 12px;border-radius:7px}.report-filters{background:#fff;padding:10px;border:1px solid var(--border);border-radius:10px}.report-filters>*{min-width:140px}.report-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:10px 0}.report-metrics>div{background:#fff;border:1px solid var(--border);border-right:4px solid #6d28d9;border-radius:9px;padding:10px}.report-metrics span{display:block;color:#667085;font-size:12px}.report-metrics strong{font-size:20px;color:#5b21b6}
 @media(max-width:1000px){.journal-head{grid-template-columns:repeat(3,1fr)}.review-row{grid-template-columns:1fr}.report-metrics{grid-template-columns:repeat(2,1fr)}}@media(max-width:600px){.journal-head{grid-template-columns:1fr 1fr}.report-metrics{grid-template-columns:1fr 1fr}.compact-search input{width:100%}}
+
+/* ===== Journal side browser layout ===== */
+.journal-layout-page{height:calc(100vh - 118px);min-height:0;overflow:hidden}.journal-two-column{display:grid;grid-template-columns:250px minmax(0,1fr);gap:10px;height:100%;min-height:0}.journal-browser{display:flex;flex-direction:column;min-height:0;background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden}.journal-browser-search{display:flex;flex-direction:column;gap:7px;padding:10px;border-bottom:1px solid var(--border);background:#f7faf9}.journal-browser-search label{font-size:12px;font-weight:700;color:var(--primary-dark)}.journal-browser-search input,.journal-browser-search select{width:100%;min-height:36px;border:1px solid var(--border);border-radius:7px;padding:6px 8px;font-family:inherit}.browser-search-actions{display:grid;grid-template-columns:1fr auto;gap:6px}.browser-search-actions a{text-decoration:none}.journal-browser-title{display:flex;align-items:center;justify-content:space-between;padding:9px 11px;border-bottom:1px solid var(--border);color:var(--primary-dark)}.journal-browser-title span{background:#e7f2ef;border-radius:12px;padding:2px 7px;font-size:11px}.journal-browser-list{flex:1;min-height:0;overflow-y:auto;padding:6px}.journal-browser-item{display:flex;align-items:center;justify-content:space-between;gap:7px;padding:9px 8px;margin-bottom:5px;border:1px solid #e2ebe8;border-radius:8px;text-decoration:none;color:var(--text);background:#fff}.journal-browser-item:hover,.journal-browser-item.active{background:#edf6f3;border-color:#84b5a8}.journal-browser-item div{min-width:0}.journal-browser-item b{display:block;font-size:12px}.journal-browser-item small{display:block;color:var(--muted);font-size:10px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.journal-browser-item em{font-style:normal;font-size:9px;padding:4px 6px;border-radius:12px;white-space:nowrap}.journal-browser-item em.draft{background:#fff3cf;color:#8a5a00}.journal-browser-item em.posted{background:#e4f5ec;color:#176047}.browser-empty{padding:25px 8px;text-align:center;color:var(--muted);font-size:12px}.journal-entry-panel{height:100%;min-height:0;padding:10px;overflow:hidden}.journal-entry-form{height:100%;display:flex;flex-direction:column;min-height:0}.journal-top-strip{display:grid;grid-template-columns:auto minmax(380px,1fr) auto;align-items:end;gap:10px;padding-bottom:9px;border-bottom:1px solid var(--border)}.journal-top-strip .title-metrics{justify-content:flex-end;flex-wrap:nowrap}.journal-scroll-area{flex:1;min-height:0;max-height:none!important;overflow:auto;margin-top:8px}.journal-scroll-area thead{position:sticky;top:0;z-index:2}.journal-fixed-actions{display:flex;align-items:end;justify-content:space-between;gap:10px;padding-top:8px;margin-top:0;border-top:1px solid var(--border);background:#fff}.journal-fixed-actions .notes-field{flex:1;max-width:none}.journal-fixed-actions .action-group{display:flex;gap:7px;white-space:nowrap}.journal-entry-panel .alert-success{position:absolute}.purchase-workspace .journal-top-strip{grid-template-columns:auto minmax(360px,1fr) auto}
+@media(max-width:1200px){.journal-top-strip{grid-template-columns:1fr}.journal-top-strip .title-metrics{justify-content:flex-start;flex-wrap:wrap}}@media(max-width:850px){.journal-layout-page{height:auto;overflow:visible}.journal-two-column{grid-template-columns:1fr;height:auto}.journal-browser{max-height:360px}.journal-entry-panel{height:70vh}.journal-fixed-actions{align-items:stretch;flex-direction:column}.journal-fixed-actions .action-group{flex-wrap:wrap}}
+
+.metrics-row{margin-bottom:8px;padding:8px 10px;border-bottom:1px solid var(--border)}
+.journal-top-strip{grid-template-columns:1fr auto!important;align-items:center}
+.workspace,.journal-entry-panel{overflow:hidden!important}
+.table-shell{overflow:hidden!important}
+.journal-scroll-area{overflow-y:auto!important}
+.journal-browser{display:flex;flex-direction:column;max-height:calc(100vh - 120px)}
+.journal-browser-list{overflow-y:auto!important}
+.form-actions,.journal-actions{position:sticky;top:0;z-index:5;background:var(--card,#fff)}
+
+
+/* ===== Fixed journal workspace: page shell ثابت والتمرير داخل مناطق العمل فقط ===== */
+body.page-sales .page-content,
+body.page-purchases .page-content{
+    overflow:hidden!important;
+    padding:10px 12px!important;
+}
+body.page-sales .journal-layout-page,
+body.page-purchases .journal-layout-page{
+    height:100%!important;
+    max-height:100%!important;
+    min-height:0!important;
+    overflow:hidden!important;
+}
+body.page-sales .journal-two-column,
+body.page-purchases .journal-two-column{
+    height:100%!important;
+    min-height:0!important;
+}
+body.page-sales .journal-entry-panel,
+body.page-purchases .journal-entry-panel{
+    height:100%!important;
+    min-height:0!important;
+    overflow:hidden!important;
+    padding:9px!important;
+}
+body.page-sales .journal-entry-form,
+body.page-purchases .journal-entry-form{
+    height:100%!important;
+    min-height:0!important;
+    overflow:hidden!important;
+}
+body.page-sales .metrics-row,
+body.page-purchases .metrics-row{
+    flex:0 0 auto;
+    margin:0 0 6px!important;
+    padding:3px 0 7px!important;
+    justify-content:flex-start!important;
+}
+body.page-sales .journal-top-strip,
+body.page-purchases .journal-top-strip{
+    flex:0 0 auto;
+    min-height:62px;
+    padding:0 0 7px!important;
+}
+body.page-sales .journal-scroll-area,
+body.page-purchases .journal-scroll-area{
+    flex:1 1 auto!important;
+    min-height:0!important;
+    overflow-y:auto!important;
+    overflow-x:auto!important;
+    margin-top:6px!important;
+}
+body.page-sales .journal-fixed-actions,
+body.page-purchases .journal-fixed-actions{
+    flex:0 0 auto;
+    min-height:56px;
+    padding-top:6px!important;
+    align-items:center!important;
+}
+body.page-sales .journal-fixed-actions .notes-field,
+body.page-purchases .journal-fixed-actions .notes-field{
+    margin:0!important;
+}
+body.page-sales .journal-browser,
+body.page-purchases .journal-browser{
+    height:100%!important;
+    max-height:none!important;
+    min-height:0!important;
+    overflow:hidden!important;
+}
+body.page-sales .journal-browser-list,
+body.page-purchases .journal-browser-list{
+    flex:1 1 auto!important;
+    min-height:0!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+}
+body.page-sales .system-footer,
+body.page-purchases .system-footer{
+    flex-basis:38px!important;
+    height:38px!important;
+    min-height:38px!important;
+    padding:6px 20px!important;
+}
+body.page-sales .topbar,
+body.page-purchases .topbar{
+    flex-basis:72px!important;
+    height:72px!important;
+    min-height:72px!important;
+}
+body.page-sales .title-metrics,
+body.page-purchases .title-metrics{
+    display:flex!important;
+    flex-wrap:nowrap!important;
+    gap:7px!important;
+}
+body.page-sales .title-metrics span,
+body.page-purchases .title-metrics span{
+    min-width:92px;
+    justify-content:center;
+}
+
+/* Purchase notice layout: remove notes column and expand description */
+.purchase-workspace.notice-mode .purchase-grid{table-layout:fixed;width:100%}
+.purchase-workspace.notice-mode .purchase-grid th:nth-child(1),
+.purchase-workspace.notice-mode .purchase-grid td:nth-child(1){width:42px}
+.purchase-workspace.notice-mode .purchase-grid th:nth-child(2),
+.purchase-workspace.notice-mode .purchase-grid td:nth-child(2){width:29%}
+.purchase-workspace.notice-mode .purchase-grid th:nth-child(3),
+.purchase-workspace.notice-mode .purchase-grid td:nth-child(3){width:13%}
+.purchase-workspace.notice-mode .purchase-grid th:nth-child(7),
+.purchase-workspace.notice-mode .purchase-grid td:nth-child(7){width:14%}
+.purchase-workspace.notice-mode .purchase-grid th:nth-child(8),
+.purchase-workspace.notice-mode .purchase-grid td:nth-child(8){width:12%}
+.purchase-workspace.notice-mode .purchase-grid .notice-description-col{width:auto}
+.purchase-workspace.notice-mode .purchase-grid .notice-description-col input{min-width:260px}
+.purchase-workspace.notice-mode .purchase-grid th:last-child,
+.purchase-workspace.notice-mode .purchase-grid td:last-child{width:52px}
+
+
+/* Purchase notice layout: supplier/document compact; pharmacy/public/discount enabled */
+.purchase-workspace.notice-mode .purchase-grid{table-layout:fixed;width:100%}
+.purchase-workspace.notice-mode .purchase-grid th:nth-child(1),
+.purchase-workspace.notice-mode .purchase-grid td:nth-child(1){width:42px}
+.purchase-workspace.notice-mode .purchase-grid th:nth-child(2),
+.purchase-workspace.notice-mode .purchase-grid td:nth-child(2){width:22%}
+.purchase-workspace.notice-mode .purchase-grid th:nth-child(3),
+.purchase-workspace.notice-mode .purchase-grid td:nth-child(3){width:10%}
+.purchase-workspace.notice-mode .purchase-grid th:nth-child(4),
+.purchase-workspace.notice-mode .purchase-grid td:nth-child(4){width:11%}
+.purchase-workspace.notice-mode .purchase-grid th:nth-child(5),
+.purchase-workspace.notice-mode .purchase-grid td:nth-child(5){width:11%}
+.purchase-workspace.notice-mode .purchase-grid th:nth-child(6),
+.purchase-workspace.notice-mode .purchase-grid td:nth-child(6){width:10%}
+.purchase-workspace.notice-mode .purchase-grid th:nth-child(7),
+.purchase-workspace.notice-mode .purchase-grid td:nth-child(7){width:13%}
+.purchase-workspace.notice-mode .purchase-grid .notice-description-col{width:auto}
+.purchase-workspace.notice-mode .purchase-grid .notice-description-col input{min-width:180px}
+.purchase-workspace.notice-mode .purchase-grid th:last-child,
+.purchase-workspace.notice-mode .purchase-grid td:last-child{width:52px}

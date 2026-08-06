@@ -67,10 +67,13 @@ def render(request: Request, template_name: str, page_title: str, active_page: s
 def parse_date(value: Optional[str], default: Optional[date] = None) -> Optional[date]:
     if not value:
         return default
-    try:
-        return datetime.strptime(value, "%Y-%m-%d").date()
-    except ValueError:
-        return default
+    value = str(value).strip()
+    for fmt in ("%d/%m/%Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(value, fmt).date()
+        except ValueError:
+            continue
+    return default
 
 
 def next_journal_no(db: Session, journal_date: date) -> str:
@@ -167,22 +170,20 @@ def sales_entry(
         if not journal:
             raise HTTPException(404, "اليومية غير موجودة")
 
-    results = []
-    if search or branch_id or journal_date:
-        query = db.query(SalesJournal).options(joinedload(SalesJournal.branch), joinedload(SalesJournal.lines))
-        if search:
-            query = query.filter(SalesJournal.journal_no.contains(search))
-        if selected_branch_id:
-            query = query.filter(SalesJournal.branch_id == selected_branch_id)
-        if journal_date:
-            query = query.filter(SalesJournal.journal_date == parse_date(journal_date))
-        results = query.order_by(SalesJournal.journal_date.desc(), SalesJournal.id.desc()).limit(25).all()
+    query = db.query(SalesJournal).options(joinedload(SalesJournal.branch), joinedload(SalesJournal.lines))
+    if search:
+        query = query.filter(SalesJournal.journal_no.contains(search))
+    if selected_branch_id:
+        query = query.filter(SalesJournal.branch_id == selected_branch_id)
+    if journal_date:
+        query = query.filter(SalesJournal.journal_date == parse_date(journal_date))
+    results = query.order_by(SalesJournal.journal_date.desc(), SalesJournal.id.desc()).limit(100).all()
 
     return render(
         request, "sales/index.html", "يومية المبيعات", "sales",
         branches=branches, employees=employees, treasuries=db.query(Treasury).filter(Treasury.is_active.is_(True)).order_by(Treasury.name).all(), journal=journal, results=results,
         is_readonly=bool(journal and journal.status == "posted"),
-        today=date.today().isoformat(), selected_branch=selected_branch_id, search=search,
+        today=date.today().strftime("%d/%m/%Y"), selected_branch=selected_branch_id, search=search,
         selected_date=journal_date or "", message=request.query_params.get("message", ""),
     )
 
@@ -381,21 +382,31 @@ def purchases(request: Request, edit_id: Optional[int]=None, search: str="", sta
     if search: q=q.join(PurchaseLine).join(Supplier).filter((PurchaseJournal.journal_no.contains(search)) | (PurchaseLine.document_no.contains(search)) | (Supplier.name.contains(search)))
     if journal_date:q=q.filter(PurchaseJournal.journal_date==parse_date(journal_date))
     if status in {"draft","posted"}: q=q.filter(PurchaseJournal.status==status)
-    results=q.order_by(PurchaseJournal.journal_date.desc(),PurchaseJournal.id.desc()).limit(20).all() if search or journal_date or status in {"draft","posted"} else []
-    return render(request,"purchases/index.html","يومية المشتريات","purchases",suppliers=db.query(Supplier).filter(Supplier.is_active.is_(True)).order_by(Supplier.name).all(),notice_types=db.query(OtherAccountItem).filter(OtherAccountItem.is_active.is_(True)).order_by(OtherAccountItem.name).all(),journal=journal,results=results,today=date.today().isoformat(),readonly=bool(journal and journal.status=="posted"),search=search,selected_status=status,selected_date=journal_date or "",message=request.query_params.get("message",""))
+    results=q.order_by(PurchaseJournal.journal_date.desc(),PurchaseJournal.id.desc()).limit(100).all()
+    return render(request,"purchases/index.html","يومية المشتريات","purchases",suppliers=db.query(Supplier).filter(Supplier.is_active.is_(True)).order_by(Supplier.name).all(),notice_types=db.query(OtherAccountItem).filter(OtherAccountItem.is_active.is_(True)).order_by(OtherAccountItem.name).all(),journal=journal,results=results,today=date.today().strftime("%d/%m/%Y"),readonly=bool(journal and journal.status=="posted"),search=search,selected_status=status,selected_date=journal_date or "",message=request.query_params.get("message",""))
 
 @app.post("/purchases/save")
 async def save_purchases(request: Request, db: Session=Depends(get_db)):
     f=await request.form(); jid=int(f.get("journal_id") or 0); d=parse_date(str(f.get("journal_date") or ""),date.today()); et=str(f.get("entry_type") or "purchase")
-    supplier_ids=f.getlist("supplier_id"); docs=f.getlist("document_no"); nts=f.getlist("notice_type"); pvs=f.getlist("pharmacy_value"); pubs=f.getlist("public_value"); effects=f.getlist("account_effect"); descs=f.getlist("description"); notes=f.getlist("line_notes")
+    supplier_ids=f.getlist("supplier_id"); docs=f.getlist("document_no"); nts=f.getlist("notice_type"); pvs=f.getlist("pharmacy_value"); pubs=f.getlist("public_value"); descs=f.getlist("description"); notes=f.getlist("line_notes")
     rows=[]
     for i,sid in enumerate(supplier_ids):
         if not sid or not docs[i].strip(): continue
-        pv=float(pvs[i] or 0); pub=float(pubs[i] or 0); disc=((pub-pv)/pub*100) if pub else 0; nt=""; effect=pv
+        pv=float(pvs[i] or 0); pub=float(pubs[i] or 0); disc=((pub-pv)/pv*100) if pv else 0; nt=""; effect=pv
         if et=="notice":
-            notice=db.get(OtherAccountItem,int(nts[i] or 0)) if i<len(nts) and str(nts[i]).isdigit() else None
-            if not notice:return RedirectResponse("/purchases?message=اختر نوع إشعار معرفاً في الإعدادات",303)
-            nt=notice.name; effect=abs(float(effects[i] or 0)) * (1 if notice.effect_sign>=0 else -1)
+            fixed_notice_types={
+                "مرتجع":-1,
+                "لم يصل":-1,
+                "خصم إضافي":-1,
+                "ت. إضافية":1,
+                "غرامة":-1,
+                "أخرى":1,
+            }
+            nt=(nts[i].strip() if i<len(nts) else "")
+            if nt not in fixed_notice_types:return RedirectResponse("/purchases?message=اختر نوع الإشعار",303)
+            if pv <= 0:return RedirectResponse("/purchases?message=أدخل القيمة صيدلي للإشعار",303)
+            if pub <= 0:return RedirectResponse("/purchases?message=أدخل القيمة جمهور للإشعار",303)
+            effect=abs(pv) * fixed_notice_types[nt]
         rows.append((int(sid),docs[i].strip(),nt,pv,pub,max(disc,0),effect,descs[i] if i<len(descs) else "",notes[i] if i<len(notes) else ""))
     if not rows: return RedirectResponse("/purchases?message=أدخل حركة واحدة على الأقل",303)
     for sid,doc,*_ in rows:
