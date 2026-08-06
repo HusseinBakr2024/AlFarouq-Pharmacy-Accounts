@@ -6,9 +6,16 @@
     <span class="settings-count">{{ records|length }} سجل</span>
   </header>
   {% if message %}<div class="message success">{{ message }}</div>{% endif %}
-  <nav class="settings-tabs settings-tabs-horizontal" aria-label="أقسام الإعدادات">
-    {% for item in tabs %}<a class="settings-tab {% if tab==item.key %}active{% endif %}" href="/settings?tab={{item.key}}"><span>{{item.title}}</span></a>{% endfor %}
-  </nav>
+  <div class="settings-body" id="settingsBody">
+  <aside class="settings-section-sidebar" id="settingsSectionSidebar">
+    <div class="settings-sidebar-head"><span>أقسام الإعدادات</span><button type="button" id="settingsSidebarToggle" title="طي القائمة" aria-label="طي قائمة الإعدادات"><i class="fa-solid fa-angles-right"></i></button></div>
+    <nav class="settings-tabs settings-tabs-vertical" aria-label="أقسام الإعدادات">
+      {% for item in tabs %}<a class="settings-tab {% if tab==item.key %}active{% endif %}" href="/settings?tab={{item.key}}" title="{{item.title}}">
+        <i class="fa-solid {% if item.key=='users' %}fa-user-shield{% elif item.key=='employees' %}fa-user-tie{% elif item.key=='branches' %}fa-code-branch{% elif item.key=='customers' %}fa-users{% elif item.key=='suppliers' %}fa-truck-field{% elif item.key=='treasuries' %}fa-vault{% elif item.key=='banks' %}fa-building-columns{% elif item.key=='expenses' %}fa-receipt{% elif item.key=='other_accounts' %}fa-scale-balanced{% else %}fa-boxes-stacked{% endif %}"></i><span>{{item.title}}</span><i class="fa-solid fa-chevron-left settings-tab-arrow"></i>
+      </a>{% endfor %}
+    </nav>
+    <div class="settings-integration-note"><i class="fa-solid fa-link"></i><span>التعريفات مرتبطة مباشرة بيوميات المبيعات والمشتريات</span></div>
+  </aside>
   <main class="settings-panel active settings-single-panel">
     <div class="panel-heading"><div><h3>{{ title }}</h3><small>{{ 'تعديل السجل المحدد' if editing else 'إضافة تعريف جديد' }}</small></div></div>
     <form method="post" action="/settings/{{tab}}/save" class="definition-form settings-editor">
@@ -27,5 +34,6 @@
       {% else %}<tr><td colspan="{{fields|length + 2}}" class="empty-state"><i class="fa-regular fa-folder-open"></i><span>لا توجد بيانات مطابقة</span></td></tr>{% endfor %}
     </tbody></table></div>
   </main>
+  </div>
 </div>
 {% endblock %}

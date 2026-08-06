@@ -28,6 +28,14 @@ document.addEventListener("DOMContentLoaded", function () {
     });
     window.addEventListener("resize", function () { if (window.innerWidth > 900) closeMobileSidebar(); });
 
+    const settingsBody = document.getElementById("settingsBody");
+    const settingsSidebarToggle = document.getElementById("settingsSidebarToggle");
+    if (settingsBody && localStorage.getItem("settings-sidebar-collapsed") === "1") settingsBody.classList.add("sidebar-folded");
+    settingsSidebarToggle?.addEventListener("click", function () {
+        settingsBody.classList.toggle("sidebar-folded");
+        localStorage.setItem("settings-sidebar-collapsed", settingsBody.classList.contains("sidebar-folded") ? "1" : "0");
+    });
+
     const settingsTabs = document.querySelectorAll(".settings-tab");
     const settingsPanels = document.querySelectorAll(".settings-panel");
     settingsTabs.forEach(function (tab) {
