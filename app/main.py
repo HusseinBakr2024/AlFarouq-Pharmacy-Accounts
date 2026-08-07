@@ -687,16 +687,59 @@ def next_claim_no(db:Session,d:date)->str:
     prefix=f"CLM-{d.year}-";last=db.query(func.max(SupplierClaim.claim_no)).filter(SupplierClaim.claim_no.like(f"{prefix}%")).scalar();seq=int(last.rsplit("-",1)[-1])+1 if last else 1;return f"{prefix}{seq:05d}"
 
 @app.get("/supplier-claims",response_class=HTMLResponse)
-def supplier_claims(request:Request,supplier_id:Optional[int]=None,db:Session=Depends(get_db)):
-    movements=[];balance=0
+def supplier_claims(request:Request,supplier_id:Optional[int]=None,date_from:Optional[str]=None,date_to:Optional[str]=None,db:Session=Depends(get_db)):
+    movements=[];balance=0;invoice_count=0;pharmacy_total=0;public_total=0;avg_discount=0;selected_supplier_label=""
     if supplier_id:
-        supplier=db.get(Supplier,supplier_id);balance=(supplier.opening_credit or 0)-(supplier.opening_debit or 0) if supplier else 0
-        claimed=db.query(SupplierClaimLine.purchase_line_id)
-        lines=db.query(PurchaseLine).join(PurchaseJournal).options(joinedload(PurchaseLine.journal)).filter(PurchaseLine.supplier_id==supplier_id,PurchaseJournal.status=="posted",~PurchaseLine.id.in_(claimed)).order_by(PurchaseJournal.journal_date,PurchaseLine.document_no,PurchaseLine.id).all()
-        for line in lines:
-            value=line.account_effect or 0;balance+=value;movements.append({"line":line,"type":purchase_movement_name(line),"value":value,"paid":0,"remaining":value,"balance":balance})
+        supplier=db.get(Supplier,supplier_id)
+        if supplier:
+            selected_supplier_label = f"{supplier.code} — {supplier.name}"
+            balance=(supplier.opening_credit or 0)-(supplier.opening_debit or 0)
+            claimed=db.query(SupplierClaimLine.purchase_line_id)
+            q=db.query(PurchaseLine).join(PurchaseJournal).options(joinedload(PurchaseLine.journal)).filter(
+                PurchaseLine.supplier_id==supplier_id,
+                PurchaseJournal.status=="posted",
+                ~PurchaseLine.id.in_(claimed),
+            )
+            if date_from:
+                q=q.filter(PurchaseJournal.journal_date>=parse_date(date_from))
+            if date_to:
+                q=q.filter(PurchaseJournal.journal_date<=parse_date(date_to))
+            lines=q.order_by(PurchaseJournal.journal_date,PurchaseLine.document_no,PurchaseLine.id).all()
+            for line in lines:
+                value=line.account_effect or 0
+                balance += value
+                discount = line.discount_percent if line.discount_percent is not None else 0
+                if discount == 0 and line.public_value:
+                    discount = abs(((line.pharmacy_value or 0) / (line.public_value or 1) * 100) - 100)
+                movements.append({
+                    "line": line,
+                    "type": purchase_movement_name(line),
+                    "pharmacy_value": line.pharmacy_value or 0,
+                    "public_value": line.public_value or 0,
+                    "avg_discount": discount,
+                    "notes": line.journal.notes or "",
+                    "value": value,
+                })
+            invoice_count = len(movements)
+            pharmacy_total = sum(x["pharmacy_value"] for x in movements)
+            public_total = sum(x["public_value"] for x in movements)
+            avg_discount = round(sum(x["avg_discount"] for x in movements) / invoice_count, 2) if invoice_count else 0
     claims=db.query(SupplierClaim).options(joinedload(SupplierClaim.supplier)).order_by(SupplierClaim.claim_date.desc(),SupplierClaim.id.desc()).limit(100).all()
-    return render(request,"supplier/claims.html","مراجعة مطالبات المورد","supplier_claims",suppliers=db.query(Supplier).filter(Supplier.is_active.is_(True)).order_by(Supplier.name).all(),supplier_id=supplier_id,movements=movements,claims=claims,today=date.today().strftime("%d/%m/%Y"),message=request.query_params.get("message",""))
+    return render(request,"supplier/claims.html","مراجعة مطالبات المورد","supplier_claims",
+        suppliers=db.query(Supplier).filter(Supplier.is_active.is_(True)).order_by(Supplier.name).all(),
+        supplier_id=supplier_id,
+        selected_supplier_label=selected_supplier_label,
+        date_from=date_from or "",
+        date_to=date_to or "",
+        invoice_count=invoice_count,
+        pharmacy_total=pharmacy_total,
+        public_total=public_total,
+        avg_discount=avg_discount,
+        movements=movements,
+        claims=claims,
+        today=date.today().strftime("%d/%m/%Y"),
+        message=request.query_params.get("message",""),
+    )
 
 @app.post("/supplier-claims/create")
 async def create_supplier_claim(request:Request,db:Session=Depends(get_db)):

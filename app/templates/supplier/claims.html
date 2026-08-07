@@ -1,8 +1,108 @@
 {% extends "base.html" %}{% block content %}<div class="erp-cycle-page supplier-claims-page">
 {% if message %}<div class="message success">{{ message }}</div>{% endif %}
-<header class="cycle-dashboard"><div><h2><i class="fa-solid fa-file-invoice-dollar"></i> مراجعة مطالبات المورد</h2><p>مراجعة الحركات غير المسددة قبل اعتماد السداد</p></div><div class="cycle-metrics"><span>الفواتير المختارة <b id="selectedCount">0</b></span><span>إجمالي القيمة المختارة <b id="selectedTotal">0.00</b></span></div></header>
-<form method="get" class="cycle-filter"><div><label>المورد</label><select name="supplier_id" onchange="this.form.submit()"><option value="">اختر المورد</option>{% for x in suppliers %}<option value="{{ x.id }}" {% if supplier_id==x.id %}selected{% endif %}>{{ x.code }} — {{ x.name }}</option>{% endfor %}</select></div></form>
-<form method="post" action="/supplier-claims/create" class="cycle-form" id="claimForm"><input type="hidden" name="supplier_id" value="{{ supplier_id or '' }}"><input type="hidden" name="claim_date" value="{{ today }}">
-<div class="cycle-table"><table class="data-table"><thead><tr><th class="select-col">اختيار</th><th>رقم الفاتورة</th><th>تاريخها</th><th>نوع الحركة</th><th>القيمة</th><th>المسدد</th><th>المتبقي</th><th>الرصيد بعد الحركة</th></tr></thead><tbody>{% for x in movements %}<tr><td><input class="claim-check" type="checkbox" name="purchase_line_id" value="{{ x.line.id }}" data-value="{{ x.value }}"></td><td>{{ x.line.document_no }}</td><td>{{ x.line.journal.journal_date.strftime('%d/%m/%Y') }}</td><td><span class="movement-badge">{{ x.type }}</span></td><td>{{ '%.2f'|format(x.value) }}</td><td>{{ '%.2f'|format(x.paid) }}</td><td>{{ '%.2f'|format(x.remaining) }}</td><td>{{ '%.2f'|format(x.balance) }}</td></tr>{% else %}<tr><td colspan="8" class="empty-state">اختر مورداً أو لا توجد حركات غير مسددة</td></tr>{% endfor %}</tbody></table></div>
-<div class="cycle-fixed-actions"><span>الاعتماد ينشئ مطالبة جاهزة للسداد ولا يغلق الفواتير.</span><button class="primary-button" {% if not supplier_id %}disabled{% endif %}><i class="fa-solid fa-circle-check"></i> اعتماد المطالبة</button></div></form>
-</div><script>(()=>{const checks=[...document.querySelectorAll('.claim-check')];function calc(){const selected=checks.filter(x=>x.checked);selectedCount.textContent=selected.length;selectedTotal.textContent=selected.reduce((a,x)=>a+(+x.dataset.value||0),0).toFixed(2)}checks.forEach(x=>x.addEventListener('change',calc));calc()})();</script>{% endblock %}
+<div class="claims-command-bar">
+  <div class="claims-bar-title">
+    <h2><i class="fa-solid fa-file-invoice-dollar"></i> مراجعة مطالبات المورد</h2>
+    <p>راجع الحركات غير المسددة بسرعة باستخدام المرشحات والمقاييس الفورية.</p>
+  </div>
+  <form method="get" class="claims-filter-form" id="claimsFilterForm">
+    <div class="claims-filter-item">
+      <label for="supplierSearch">المورد</label>
+      <input id="supplierSearch" name="supplier_search" list="supplierOptions" type="text" value="{{ selected_supplier_label }}" placeholder="ابحث عن المورد" autocomplete="off">
+      <datalist id="supplierOptions">{% for x in suppliers %}<option data-id="{{ x.id }}" value="{{ x.code }} — {{ x.name }}"></option>{% endfor %}</datalist>
+      <input type="hidden" name="supplier_id" id="supplierIdInput" value="{{ supplier_id or '' }}">
+    </div>
+    <div class="claims-filter-item">
+      <label for="dateFrom">من تاريخ</label>
+      <input id="dateFrom" name="date_from" type="text" inputmode="numeric" value="{{ date_from }}" placeholder="dd/MM/yyyy">
+    </div>
+    <div class="claims-filter-item">
+      <label for="dateTo">إلى تاريخ</label>
+      <input id="dateTo" name="date_to" type="text" inputmode="numeric" value="{{ date_to }}" placeholder="dd/MM/yyyy">
+    </div>
+    <button type="submit" class="secondary-button">تحديث</button>
+  </form>
+  <div class="claims-kpi-panel">
+    <div class="claims-kpi-card">
+      <span>عدد الفواتير</span>
+      <strong>{{ invoice_count }}</strong>
+    </div>
+    <div class="claims-kpi-card">
+      <span>إجمالي قيمة الصيدلية</span>
+      <strong>{{ pharmacy_total|round(2) }}</strong>
+    </div>
+    <div class="claims-kpi-card">
+      <span>إجمالي القيمة العامة</span>
+      <strong>{{ public_total|round(2) }}</strong>
+    </div>
+    <div class="claims-kpi-card">
+      <span>متوسط الخصم %</span>
+      <strong>{{ avg_discount|round(2) }}</strong>
+    </div>
+  </div>
+  <div class="claims-action-panel">
+    <button class="primary-button" form="claimForm" type="submit" {% if not supplier_id %}disabled{% endif %}><i class="fa-solid fa-circle-check"></i> اعتماد المطالبة</button>
+    <div class="claims-action-summary"><span>الفواتير المختارة <b id="selectedCount">0</b></span><span>إجمالي القيمة <b id="selectedTotal">0.00</b></span></div>
+  </div>
+</div>
+<form method="post" action="/supplier-claims/create" id="claimForm" class="claims-table-form">
+  <input type="hidden" name="supplier_id" value="{{ supplier_id or '' }}">
+  <input type="hidden" name="claim_date" value="{{ today }}">
+  <div class="claims-table-shell">
+    <table class="data-table claims-data-table">
+      <thead>
+        <tr>
+          <th class="select-col">□</th>
+          <th class="col-doc">رقم المستند</th>
+          <th class="col-date">التاريخ</th>
+          <th class="col-type">نوع الحركة</th>
+          <th class="col-pharm">قيمة الصيدلية</th>
+          <th class="col-public">القيمة العامة</th>
+          <th class="col-discount">متوسط الخصم %</th>
+          <th class="col-notes">الوصف / الملاحظات</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for x in movements %}
+        <tr>
+          <td><input class="claim-check" type="checkbox" name="purchase_line_id" value="{{ x.line.id }}" data-value="{{ x.pharmacy_value }}"></td>
+          <td>{{ x.line.document_no }}</td>
+          <td>{{ x.line.journal.journal_date.strftime('%d/%m/%Y') }}</td>
+          <td><span class="movement-badge">{{ x.type }}</span></td>
+          <td>{{ '%.2f'|format(x.pharmacy_value) }}</td>
+          <td>{{ '%.2f'|format(x.public_value) }}</td>
+          <td>{{ '%.2f'|format(x.avg_discount) }}</td>
+          <td>{{ x.notes }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="empty-state">اختر مورداً أو لا توجد حركات غير مسددة</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="claims-table-note">الاعتماد ينشئ مطالبة جاهزة للسداد ولا يغلق الفواتير.</div>
+</form>
+</div>
+<script>
+(() => {
+  const supplierSearch = document.getElementById('supplierSearch');
+  const supplierIdInput = document.getElementById('supplierIdInput');
+  const supplierOptions = Array.from(document.querySelectorAll('#supplierOptions option'));
+  const selectedCount = document.getElementById('selectedCount');
+  const selectedTotal = document.getElementById('selectedTotal');
+  const checks = Array.from(document.querySelectorAll('.claim-check'));
+  function syncSupplierId() {
+    const match = supplierOptions.find(option => option.value === supplierSearch.value.trim());
+    supplierIdInput.value = match ? match.dataset.id : '';
+  }
+  supplierSearch?.addEventListener('input', syncSupplierId);
+  function calcSelection() {
+    const selected = checks.filter(input => input.checked);
+    selectedCount.textContent = selected.length;
+    selectedTotal.textContent = selected.reduce((sum, input) => sum + (parseFloat(input.dataset.value) || 0), 0).toFixed(2);
+  }
+  checks.forEach(input => input.addEventListener('change', calcSelection));
+  calcSelection();
+})();
+</script>
+{% endblock %}
