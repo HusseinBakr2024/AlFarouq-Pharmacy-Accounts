@@ -161,6 +161,7 @@ function initJournalAjaxSave(form) {
                 return;
             }
             showToast(data.message || "تم حفظ اليومية بنجاح", "success");
+            document.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
             resetJournalForm(form);
         } catch (error) {
             showToast("فشل الاتصال بالسيرفر", "error");
