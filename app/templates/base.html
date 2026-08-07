@@ -57,22 +57,17 @@
                 <span>يومية المبيعات</span>
             </a>
 
-            <a href="/review" class="menu-link {% if active_page == 'review' %}active{% endif %}" title="مراجعة وترحيل">
-                <i class="fa-solid fa-clipboard-check"></i>
-                <span>مراجعة وترحيل</span>
-            </a>
-
             <a href="/purchases" class="menu-link {% if active_page == 'purchases' %}active{% endif %}" title="يومية المشتريات">
                 <i class="fa-solid fa-cart-shopping"></i>
                 <span>يومية المشتريات</span>
             </a>
 
-            <a href="#" class="menu-link" title="يومية المصروفات">
+            <a href="/expenses" class="menu-link {% if active_page == 'expenses' %}active{% endif %}" title="يومية مصروفات الفروع">
                 <i class="fa-solid fa-money-bill-wave"></i>
-                <span>يومية المصروفات</span>
+                <span>يومية مصروفات الفروع</span>
             </a>
 
-            <a href="#" class="menu-link" title="يومية الحسابات الأخرى">
+            <a href="/other-accounts" class="menu-link {% if active_page == 'other_accounts' %}active{% endif %}" title="يومية الحسابات الأخرى">
                 <i class="fa-solid fa-right-left"></i>
                 <span>يومية الحسابات الأخرى</span>
             </a>
@@ -82,22 +77,17 @@
                 <span>سداد الموردين</span>
             </a>
 
-            <a href="#" class="menu-link" title="البنوك والشيكات">
-                <i class="fa-solid fa-building-columns"></i>
-                <span>البنوك والشيكات</span>
+            <a href="/review" class="menu-link {% if active_page == 'review' %}active{% endif %}" title="مراجعة وترحيل">
+                <i class="fa-solid fa-clipboard-check"></i>
+                <span>مراجعة وترحيل</span>
             </a>
-
-            <a href="#" class="menu-link" title="مطابقات الموردين">
-                <i class="fa-solid fa-file-circle-check"></i>
-                <span>مطابقات الموردين</span>
-            </a>
-
-            <a href="/reports" class="menu-link {% if active_page == 'reports' %}active{% endif %}" title="مركز التقارير"><i class="fa-solid fa-chart-column"></i><span>التقارير</span></a>
 
             <a href="/closing-stock" class="menu-link {% if active_page == 'closing_stock' %}active{% endif %}" title="مخزون آخر الفترة">
                 <i class="fa-solid fa-box-open"></i>
                 <span>مخزون آخر الفترة</span>
             </a>
+
+            <a href="/reports" class="menu-link {% if active_page == 'reports' %}active{% endif %}" title="مركز التقارير"><i class="fa-solid fa-chart-column"></i><span>التقارير</span></a>
 
         </div>
 

@@ -15,7 +15,8 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.database import Base, SessionLocal, engine, get_db
 from app.models import (Branch, Employee, Supplier, SalesJournal, SalesLine, PurchaseJournal, PurchaseLine,
-    User, Customer, Treasury, Bank, ExpenseItem, OtherAccountItem, OpeningStock, TreasuryDeposit)
+    User, Customer, Treasury, Bank, ExpenseItem, OtherAccountItem, OpeningStock, TreasuryDeposit,
+    ExpenseJournal, ExpenseLine, OtherAccountJournal, OtherAccountLine)
 
 Base.metadata.create_all(bind=engine)
 
@@ -28,6 +29,14 @@ with engine.begin() as connection:
     if "notice_type" not in purchase_journal_columns:
         connection.execute(text("ALTER TABLE purchase_journals ADD COLUMN notice_type VARCHAR(40) NOT NULL DEFAULT ''"))
         connection.execute(text("UPDATE purchase_journals SET notice_type = COALESCE((SELECT notice_type FROM purchase_lines WHERE purchase_lines.journal_id = purchase_journals.id AND notice_type <> '' LIMIT 1), '') WHERE entry_type = 'notice'"))
+    expense_columns={column["name"] for column in inspect(connection).get_columns("expense_items")}
+    if "expense_type" not in expense_columns:
+        connection.execute(text("ALTER TABLE expense_items ADD COLUMN expense_type VARCHAR(20) NOT NULL DEFAULT 'operating'"))
+    account_columns={column["name"] for column in inspect(connection).get_columns("other_account_items")}
+    if "opening_debit" not in account_columns:
+        connection.execute(text("ALTER TABLE other_account_items ADD COLUMN opening_debit FLOAT NOT NULL DEFAULT 0"))
+    if "opening_credit" not in account_columns:
+        connection.execute(text("ALTER TABLE other_account_items ADD COLUMN opening_credit FLOAT NOT NULL DEFAULT 0"))
 
 app = FastAPI(title="صيدليات الفاروق")
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
@@ -109,8 +118,8 @@ SETTINGS = {
  "suppliers": (Supplier,"SUP","الموردون",[("name","اسم المورد","text"),("phone","رقم التواصل","text"),("opening_debit","افتتاحي مدين","number"),("opening_credit","افتتاحي دائن","number"),("is_active","نشط","bool")]),
  "treasuries": (Treasury,"TRE","الخزائن",[("name","اسم الخزينة","text"),("branch_id","الفرع","branch"),("opening_balance","الرصيد الافتتاحي","number"),("is_active","نشط","bool")]),
  "banks": (Bank,"BNK","البنوك",[("name","اسم البنك","text"),("account_number","رقم الحساب","text"),("opening_balance","الرصيد الافتتاحي","number"),("is_active","نشط","bool")]),
- "expenses": (ExpenseItem,"EXP","بنود المصروفات",[("name","اسم البند","text"),("description","البيان","text"),("is_active","نشط","bool")]),
- "other_accounts": (OtherAccountItem,"ACC","بنود الحسابات الأخرى",[("name","اسم البند / نوع الإشعار","text"),("account_type","تصنيف الحساب","text"),("effect_sign","معامل التأثير (+1 أو -1)","number"),("description","البيان","text"),("is_active","نشط","bool")]),
+ "expenses": (ExpenseItem,"EXP","بنود المصروفات",[("name","اسم المصروف","text"),("expense_type","نوع المصروف","expense_type"),("is_active","نشط","bool")]),
+ "other_accounts": (OtherAccountItem,"ACC","الحسابات الأخرى",[("name","اسم الحساب","text"),("opening_debit","افتتاحي مدين","number"),("opening_credit","افتتاحي دائن","number"),("is_active","نشط","bool")]),
  "opening_stock": (OpeningStock,"STK","المخزون الافتتاحي",[("item_name","اسم الصنف","text"),("branch_id","الفرع","branch"),("quantity","الكمية","number"),("unit_cost","تكلفة الوحدة","number"),("notes","ملاحظات","text")]),
 }
 
@@ -135,6 +144,11 @@ async def save_setting(tab: str, request: Request, db: Session = Depends(get_db)
         elif kind=="branch": value=int(raw or 0)
         else: value=str(raw or "").strip()
         setattr(record,name,value)
+    if tab=="expenses" and record.expense_type not in {"operating","general"}:
+        return RedirectResponse("/settings?tab=expenses&message=يجب اختيار نوع المصروف",303)
+    if tab=="other_accounts":
+        record.opening_debit=max(record.opening_debit,0); record.opening_credit=max(record.opening_credit,0)
+        if record.opening_debit>0: record.opening_credit=0
     if not getattr(record,"id",None): db.add(record)
     try: db.commit()
     except IntegrityError:
@@ -267,16 +281,18 @@ async def save_sales(request: Request, db: Session = Depends(get_db)):
 
 
 @app.get("/review", response_class=HTMLResponse)
-def unified_review(request: Request, type: str="sales", db: Session=Depends(get_db)):
+def unified_review(request: Request, type: str="sales", search: str="", db: Session=Depends(get_db)):
     allowed={"sales","purchases","expenses","other_accounts","supplier_payments"}
     if type not in allowed:type="sales"
     if type=="purchases":
         all_items=db.query(PurchaseJournal).options(joinedload(PurchaseJournal.lines).joinedload(PurchaseLine.supplier)).order_by(PurchaseJournal.journal_date.desc(),PurchaseJournal.id.desc()).all()
+    elif type=="expenses":all_items=db.query(ExpenseJournal).options(joinedload(ExpenseJournal.branch),joinedload(ExpenseJournal.lines).joinedload(ExpenseLine.expense_item)).order_by(ExpenseJournal.journal_date.desc(),ExpenseJournal.id.desc()).all()
+    elif type=="other_accounts":all_items=db.query(OtherAccountJournal).options(joinedload(OtherAccountJournal.lines).joinedload(OtherAccountLine.account)).order_by(OtherAccountJournal.journal_date.desc(),OtherAccountJournal.id.desc()).all()
     elif type=="sales":all_items=db.query(SalesJournal).options(joinedload(SalesJournal.branch),joinedload(SalesJournal.lines).joinedload(SalesLine.employee)).order_by(SalesJournal.journal_date.desc(),SalesJournal.id.desc()).all()
     else:all_items=[]
-    items=[x for x in all_items if x.status=="draft"]
-    totals={"draft":len(items),"lines":sum(len(x.lines) for x in items),"value":sum((x.total_net_cash if type=="sales" else x.total_effect) for x in items)}
-    return render(request,"sales/review.html","مراجعة وترحيل","review",journals=items,totals=totals,selected_type=type,message=request.query_params.get("message",""))
+    items=[x for x in all_items if x.status=="draft" and (not search or search.lower() in x.journal_no.lower())]
+    totals={"draft":len(items),"lines":sum(len(x.lines) for x in items),"value":sum((x.total_net_cash if type=="sales" else x.total_effect if type=="purchases" else x.total_amount) for x in items)}
+    return render(request,"sales/review.html","مراجعة وترحيل","review",journals=items,totals=totals,selected_type=type,search=search,message=request.query_params.get("message",""))
 
 @app.get("/sales/review")
 def sales_review_redirect():
@@ -317,6 +333,21 @@ def unified_reports(request:Request,tab:str="sales",branch_id:Optional[int]=None
         if date_to:q=q.filter(PurchaseJournal.journal_date<=parse_date(date_to))
         if status in {"draft","posted"}:q=q.filter(PurchaseJournal.status==status)
         lines=q.order_by(PurchaseJournal.journal_date.desc(),PurchaseLine.id.desc()).all(); totals=[("الحركات",len(lines)),("القيمة صيدلي",sum(x.pharmacy_value for x in lines)),("القيمة جمهور",sum(x.public_value for x in lines)),("تأثير المورد",sum(x.account_effect for x in lines))]
+    elif tab=="expenses":
+        q=db.query(ExpenseLine).join(ExpenseJournal).options(joinedload(ExpenseLine.expense_item),joinedload(ExpenseLine.journal).joinedload(ExpenseJournal.branch))
+        if branch_id:q=q.filter(ExpenseJournal.branch_id==branch_id)
+        if journal_no:q=q.filter(ExpenseJournal.journal_no.contains(journal_no))
+        if date_from:q=q.filter(ExpenseJournal.journal_date>=parse_date(date_from))
+        if date_to:q=q.filter(ExpenseJournal.journal_date<=parse_date(date_to))
+        if status in {"draft","posted"}:q=q.filter(ExpenseJournal.status==status)
+        lines=q.order_by(ExpenseJournal.journal_date.desc(),ExpenseLine.id.desc()).all();totals=[("الحركات",len(lines)),("إجمالي المصروفات",sum(x.amount for x in lines))]
+    elif tab=="other_accounts":
+        q=db.query(OtherAccountLine).join(OtherAccountJournal).options(joinedload(OtherAccountLine.account),joinedload(OtherAccountLine.journal))
+        if journal_no:q=q.filter(OtherAccountJournal.journal_no.contains(journal_no))
+        if date_from:q=q.filter(OtherAccountJournal.journal_date>=parse_date(date_from))
+        if date_to:q=q.filter(OtherAccountJournal.journal_date<=parse_date(date_to))
+        if status in {"draft","posted"}:q=q.filter(OtherAccountJournal.status==status)
+        lines=q.order_by(OtherAccountJournal.journal_date.desc(),OtherAccountLine.id.desc()).all();totals=[("الحركات",len(lines)),("إجمالي المبالغ",sum(x.amount for x in lines))]
     else:lines=[]; totals=[("الحركات",0),("الإجمالي",0),("المرحل",0),("غير المرحل",0)]
     return render(request,"reports/unified.html","التقارير","reports",tab=tab,lines=lines,totals=totals,filters=filters,branches=db.query(Branch).order_by(Branch.name).all(),employees=db.query(Employee).order_by(Employee.name).all(),suppliers=db.query(Supplier).order_by(Supplier.name).all())
 
@@ -400,7 +431,7 @@ async def save_purchases(request: Request, db: Session=Depends(get_db)):
     rows=[]
     for i,sid in enumerate(supplier_ids):
         if not sid or not docs[i].strip(): continue
-        pv=float(pvs[i] or 0); pub=float(pubs[i] or 0); disc=((pub-pv)/pv*100) if pv else 0; nt=""; effect=pv
+        pv=float(pvs[i] or 0); pub=float(pubs[i] or 0); disc=abs(((pv/pub)*100)-100) if pub else 0; nt=""; effect=pv
         if et=="notice":
             nt=journal_notice_type
             if pv <= 0:return RedirectResponse("/purchases?message=أدخل القيمة صيدلي للإشعار",303)
@@ -446,6 +477,111 @@ def export_purchases(supplier_id:Optional[int]=None,entry_type:str="all",status:
     for x in lines:ws.append([x.journal.journal_no,x.journal.journal_date.strftime("%d/%m/%Y"),"فاتورة شراء" if x.entry_type=="purchase" else (x.journal.notice_type or x.notice_type or "إشعار"),x.supplier.name,x.document_no,x.notice_type,x.pharmacy_value,x.public_value,x.discount_percent,x.account_effect,x.description,"مرحلة" if x.journal.status=="posted" else "غير مرحلة"] )
     for i,w in enumerate([18,14,12,24,18,18,14,14,12,16,28,14],1):ws.column_dimensions[get_column_letter(i)].width=w
     out=BytesIO();wb.save(out);out.seek(0);return StreamingResponse(out,media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",headers={"Content-Disposition":"attachment; filename=AlFarouq_Purchases_Report.xlsx"})
+
+def next_number(db:Session, model, prefix:str, d:date)->str:
+    stem=f"{prefix}-{d.year}-"; last=db.query(func.max(model.journal_no)).filter(model.journal_no.like(f"{stem}%")).scalar(); seq=int(last.rsplit("-",1)[-1])+1 if last else 1; return f"{stem}{seq:05d}"
+
+@app.get("/expenses",response_class=HTMLResponse)
+def expenses(request:Request,edit_id:Optional[int]=None,search:str="",status:str="all",journal_date:Optional[str]=None,db:Session=Depends(get_db)):
+    journal=db.query(ExpenseJournal).options(joinedload(ExpenseJournal.branch),joinedload(ExpenseJournal.lines).joinedload(ExpenseLine.expense_item)).filter(ExpenseJournal.id==edit_id).first() if edit_id else None
+    if edit_id and not journal:raise HTTPException(404,"اليومية غير موجودة")
+    q=db.query(ExpenseJournal).options(joinedload(ExpenseJournal.branch),joinedload(ExpenseJournal.lines))
+    if search:q=q.filter(ExpenseJournal.journal_no.contains(search))
+    if status in {"draft","posted"}:q=q.filter(ExpenseJournal.status==status)
+    if journal_date:q=q.filter(ExpenseJournal.journal_date==parse_date(journal_date))
+    return render(request,"expenses/index.html","يومية مصروفات الفروع","expenses",journal=journal,results=q.order_by(ExpenseJournal.journal_date.desc(),ExpenseJournal.id.desc()).limit(100).all(),branches=db.query(Branch).filter(Branch.is_active.is_(True)).order_by(Branch.name).all(),expense_items=db.query(ExpenseItem).filter(ExpenseItem.is_active.is_(True)).order_by(ExpenseItem.name).all(),readonly=bool(journal and journal.status=="posted"),today=date.today().strftime("%d/%m/%Y"),search=search,selected_status=status,selected_date=journal_date or "",message=request.query_params.get("message",""))
+
+@app.post("/expenses/save")
+async def save_expenses(request:Request,db:Session=Depends(get_db)):
+    f=await request.form(); jid=int(f.get("journal_id") or 0); d=parse_date(f.get("journal_date"),date.today()); kind=str(f.get("expense_type") or ""); branch_id=int(f.get("branch_id") or 0) or None
+    if kind not in {"operating","general"}:return RedirectResponse("/expenses?message=اختر نوع المصروف",303)
+    if kind=="operating" and not branch_id:return RedirectResponse("/expenses?message=الفرع مطلوب للمصروف التشغيلي",303)
+    if kind=="general":branch_id=None
+    ids=f.getlist("expense_item_id"); amounts=f.getlist("amount"); notes=f.getlist("line_notes"); rows=[]
+    for i,item_id in enumerate(ids):
+        amount=float(amounts[i] or 0)
+        if item_id and amount>0:rows.append((int(item_id),amount,notes[i].strip() if i<len(notes) else ""))
+    if not rows:return RedirectResponse("/expenses?message=أدخل حركة مصروف واحدة على الأقل",303)
+    valid={x.id for x in db.query(ExpenseItem).filter(ExpenseItem.id.in_([x[0] for x in rows]),ExpenseItem.expense_type==kind,ExpenseItem.is_active.is_(True)).all()}
+    if len(valid)!=len(set(x[0] for x in rows)):return RedirectResponse("/expenses?message=يوجد حساب لا يطابق نوع المصروف",303)
+    if jid:
+        j=db.query(ExpenseJournal).options(joinedload(ExpenseJournal.lines)).filter(ExpenseJournal.id==jid).first()
+        if not j or j.status=="posted":return RedirectResponse("/expenses?message=لا يمكن تعديل اليومية",303)
+        j.journal_date=d;j.expense_type=kind;j.branch_id=branch_id;j.lines.clear()
+    else:j=ExpenseJournal(journal_no=next_number(db,ExpenseJournal,"EJ",d),journal_date=d,expense_type=kind,branch_id=branch_id);db.add(j)
+    for item_id,amount,note in rows:j.lines.append(ExpenseLine(expense_item_id=item_id,amount=amount,notes=note))
+    db.commit();return RedirectResponse("/expenses?message=تم حفظ يومية المصروفات بنجاح",303)
+
+@app.post("/expenses/{journal_id}/post")
+def post_expense(journal_id:int,db:Session=Depends(get_db)):
+    j=db.get(ExpenseJournal,journal_id)
+    if not j:raise HTTPException(404,"اليومية غير موجودة")
+    if j.status!="posted":j.status="posted";j.posted_at=datetime.utcnow();db.commit()
+    return RedirectResponse("/review?type=expenses&message=تم الترحيل",303)
+
+@app.get("/other-accounts",response_class=HTMLResponse)
+def other_accounts(request:Request,edit_id:Optional[int]=None,search:str="",status:str="all",journal_date:Optional[str]=None,db:Session=Depends(get_db)):
+    journal=db.query(OtherAccountJournal).options(joinedload(OtherAccountJournal.lines).joinedload(OtherAccountLine.account)).filter(OtherAccountJournal.id==edit_id).first() if edit_id else None
+    if edit_id and not journal:raise HTTPException(404,"اليومية غير موجودة")
+    q=db.query(OtherAccountJournal).options(joinedload(OtherAccountJournal.lines))
+    if search:q=q.filter(OtherAccountJournal.journal_no.contains(search))
+    if status in {"draft","posted"}:q=q.filter(OtherAccountJournal.status==status)
+    if journal_date:q=q.filter(OtherAccountJournal.journal_date==parse_date(journal_date))
+    return render(request,"other_accounts/index.html","يومية الحسابات الأخرى","other_accounts",journal=journal,results=q.order_by(OtherAccountJournal.journal_date.desc(),OtherAccountJournal.id.desc()).limit(100).all(),accounts=db.query(OtherAccountItem).filter(OtherAccountItem.is_active.is_(True)).order_by(OtherAccountItem.name).all(),readonly=bool(journal and journal.status=="posted"),today=date.today().strftime("%d/%m/%Y"),search=search,selected_status=status,selected_date=journal_date or "",message=request.query_params.get("message",""))
+
+@app.post("/other-accounts/save")
+async def save_other_accounts(request:Request,db:Session=Depends(get_db)):
+    f=await request.form();jid=int(f.get("journal_id") or 0);d=parse_date(f.get("journal_date"),date.today());kind=str(f.get("transaction_type") or "")
+    if kind not in {"funding","withdrawal"}:return RedirectResponse("/other-accounts?message=اختر نوع الحركة",303)
+    ids=f.getlist("account_id");amounts=f.getlist("amount");descriptions=f.getlist("description");rows=[]
+    for i,account_id in enumerate(ids):
+        amount=float(amounts[i] or 0)
+        if account_id and amount>0:rows.append((int(account_id),amount,descriptions[i].strip() if i<len(descriptions) else ""))
+    if not rows:return RedirectResponse("/other-accounts?message=أدخل حركة واحدة على الأقل",303)
+    valid={x.id for x in db.query(OtherAccountItem).filter(OtherAccountItem.id.in_([x[0] for x in rows]),OtherAccountItem.is_active.is_(True)).all()}
+    if len(valid)!=len(set(x[0] for x in rows)):return RedirectResponse("/other-accounts?message=يوجد حساب غير صالح",303)
+    if jid:
+        j=db.query(OtherAccountJournal).options(joinedload(OtherAccountJournal.lines)).filter(OtherAccountJournal.id==jid).first()
+        if not j or j.status=="posted":return RedirectResponse("/other-accounts?message=لا يمكن تعديل اليومية",303)
+        j.journal_date=d;j.transaction_type=kind;j.lines.clear()
+    else:j=OtherAccountJournal(journal_no=next_number(db,OtherAccountJournal,"OJ",d),journal_date=d,transaction_type=kind);db.add(j)
+    for account_id,amount,description in rows:j.lines.append(OtherAccountLine(account_id=account_id,amount=amount,description=description))
+    db.commit();return RedirectResponse("/other-accounts?message=تم حفظ يومية الحسابات الأخرى بنجاح",303)
+
+@app.post("/other-accounts/{journal_id}/post")
+def post_other_account(journal_id:int,db:Session=Depends(get_db)):
+    j=db.get(OtherAccountJournal,journal_id)
+    if not j:raise HTTPException(404,"اليومية غير موجودة")
+    if j.status!="posted":j.status="posted";j.posted_at=datetime.utcnow();db.commit()
+    return RedirectResponse("/review?type=other_accounts&message=تم الترحيل",303)
+
+def journal_export(title:str,headers:list,rows:list,filename:str):
+    wb=Workbook();ws=wb.active;ws.title=title;ws.sheet_view.rightToLeft=True;ws.append(headers)
+    for c in ws[1]:c.font=Font(bold=True,color="FFFFFF");c.fill=PatternFill("solid",fgColor="243B53");c.alignment=Alignment(horizontal="center")
+    for row in rows:ws.append(row)
+    for column in range(1,len(headers)+1):ws.column_dimensions[get_column_letter(column)].width=22
+    out=BytesIO();wb.save(out);out.seek(0);return StreamingResponse(out,media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",headers={"Content-Disposition":f"attachment; filename={filename}"})
+
+@app.get("/reports/expenses/export")
+def export_expenses(branch_id:Optional[int]=None,status:str="all",journal_no:str="",date_from:Optional[str]=None,date_to:Optional[str]=None,db:Session=Depends(get_db)):
+    q=db.query(ExpenseLine).join(ExpenseJournal).options(joinedload(ExpenseLine.expense_item),joinedload(ExpenseLine.journal).joinedload(ExpenseJournal.branch))
+    if branch_id:q=q.filter(ExpenseJournal.branch_id==branch_id)
+    if status in {"draft","posted"}:q=q.filter(ExpenseJournal.status==status)
+    if journal_no:q=q.filter(ExpenseJournal.journal_no.contains(journal_no))
+    if date_from:q=q.filter(ExpenseJournal.journal_date>=parse_date(date_from))
+    if date_to:q=q.filter(ExpenseJournal.journal_date<=parse_date(date_to))
+    rows=[[x.journal.journal_no,x.journal.journal_date.strftime("%d/%m/%Y"),"مصروف تشغيلي" if x.journal.expense_type=="operating" else "مصروف عمومي",x.journal.branch.name if x.journal.branch else "—",x.expense_item.name,x.amount,x.notes,"مرحلة" if x.journal.status=="posted" else "غير مرحلة"] for x in q.order_by(ExpenseJournal.journal_date,ExpenseLine.id).all()]
+    return journal_export("تقرير المصروفات",["اليومية","التاريخ","النوع","الفرع","الحساب","القيمة","ملاحظات","الحالة"],rows,"AlFarouq_Expenses_Report.xlsx")
+
+@app.get("/reports/other-accounts/export")
+def export_other_accounts(status:str="all",journal_no:str="",date_from:Optional[str]=None,date_to:Optional[str]=None,db:Session=Depends(get_db)):
+    q=db.query(OtherAccountLine).join(OtherAccountJournal).options(joinedload(OtherAccountLine.account),joinedload(OtherAccountLine.journal))
+    if status in {"draft","posted"}:q=q.filter(OtherAccountJournal.status==status)
+    if journal_no:q=q.filter(OtherAccountJournal.journal_no.contains(journal_no))
+    if date_from:q=q.filter(OtherAccountJournal.journal_date>=parse_date(date_from))
+    if date_to:q=q.filter(OtherAccountJournal.journal_date<=parse_date(date_to))
+    rows=[[x.journal.journal_no,x.journal.journal_date.strftime("%d/%m/%Y"),"تمويل" if x.journal.transaction_type=="funding" else "سحب",x.account.name,x.amount,x.description,"مرحلة" if x.journal.status=="posted" else "غير مرحلة"] for x in q.order_by(OtherAccountJournal.journal_date,OtherAccountLine.id).all()]
+    return journal_export("تقرير الحسابات الأخرى",["اليومية","التاريخ","نوع الحركة","الحساب","المبلغ","البيان","الحالة"],rows,"AlFarouq_Other_Accounts_Report.xlsx")
 
 @app.get("/health")
 def health():

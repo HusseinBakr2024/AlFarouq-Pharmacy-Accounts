@@ -30,10 +30,10 @@ class Bank(Base):
     id=Column(Integer,primary_key=True); code=Column(String(20),unique=True,nullable=False); name=Column(String(150),nullable=False); account_number=Column(String(100),default=''); opening_balance=Column(Float,default=0,nullable=False); is_active=Column(Boolean,default=True,nullable=False)
 class ExpenseItem(Base):
     __tablename__='expense_items'
-    id=Column(Integer,primary_key=True); code=Column(String(20),unique=True,nullable=False); name=Column(String(150),unique=True,nullable=False); description=Column(String(300),default=''); is_active=Column(Boolean,default=True,nullable=False)
+    id=Column(Integer,primary_key=True); code=Column(String(20),unique=True,nullable=False); name=Column(String(150),unique=True,nullable=False); description=Column(String(300),default=''); expense_type=Column(String(20),default='operating',nullable=False); is_active=Column(Boolean,default=True,nullable=False)
 class OtherAccountItem(Base):
     __tablename__='other_account_items'
-    id=Column(Integer,primary_key=True); code=Column(String(20),unique=True,nullable=False); name=Column(String(150),unique=True,nullable=False); account_type=Column(String(80),default=''); effect_sign=Column(Integer,default=1,nullable=False); description=Column(String(300),default=''); is_active=Column(Boolean,default=True,nullable=False)
+    id=Column(Integer,primary_key=True); code=Column(String(20),unique=True,nullable=False); name=Column(String(150),unique=True,nullable=False); account_type=Column(String(80),default=''); effect_sign=Column(Integer,default=1,nullable=False); description=Column(String(300),default=''); opening_debit=Column(Float,default=0,nullable=False); opening_credit=Column(Float,default=0,nullable=False); is_active=Column(Boolean,default=True,nullable=False)
 class OpeningStock(Base):
     __tablename__='opening_stocks'
     id=Column(Integer,primary_key=True); code=Column(String(20),unique=True,nullable=False); item_name=Column(String(180),nullable=False); branch_id=Column(Integer,ForeignKey('branches.id'),nullable=False); quantity=Column(Float,default=0,nullable=False); unit_cost=Column(Float,default=0,nullable=False); notes=Column(String(300),default='')
@@ -60,3 +60,19 @@ class PurchaseLine(Base):
     __tablename__='purchase_lines'; __table_args__=(UniqueConstraint('supplier_id','document_no','entry_type',name='uq_supplier_document_type'),)
     id=Column(Integer,primary_key=True); journal_id=Column(Integer,ForeignKey('purchase_journals.id'),nullable=False,index=True); supplier_id=Column(Integer,ForeignKey('suppliers.id'),nullable=False,index=True); entry_type=Column(String(20),nullable=False); document_no=Column(String(80),nullable=False,index=True); notice_type=Column(String(40),default=''); pharmacy_value=Column(Float,default=0,nullable=False); public_value=Column(Float,default=0,nullable=False); discount_percent=Column(Float,default=0,nullable=False); account_effect=Column(Float,default=0,nullable=False); description=Column(String(250),default=''); notes=Column(String(500),default='')
     journal=relationship('PurchaseJournal',back_populates='lines'); supplier=relationship('Supplier',back_populates='purchase_lines')
+class ExpenseJournal(Base):
+    __tablename__='expense_journals'
+    id=Column(Integer,primary_key=True); journal_no=Column(String(30),unique=True,nullable=False,index=True); journal_date=Column(Date,nullable=False,index=True); expense_type=Column(String(20),nullable=False,index=True); branch_id=Column(Integer,ForeignKey('branches.id'),index=True); status=Column(String(20),default='draft',nullable=False,index=True); notes=Column(String(500),default=''); created_at=Column(DateTime,default=datetime.utcnow,nullable=False); updated_at=Column(DateTime,default=datetime.utcnow,onupdate=datetime.utcnow,nullable=False); posted_at=Column(DateTime)
+    branch=relationship('Branch'); lines=relationship('ExpenseLine',back_populates='journal',cascade='all, delete-orphan',order_by='ExpenseLine.id'); total_amount=property(lambda s:sum(x.amount or 0 for x in s.lines))
+class ExpenseLine(Base):
+    __tablename__='expense_lines'
+    id=Column(Integer,primary_key=True); journal_id=Column(Integer,ForeignKey('expense_journals.id'),nullable=False,index=True); expense_item_id=Column(Integer,ForeignKey('expense_items.id'),nullable=False,index=True); amount=Column(Float,default=0,nullable=False); notes=Column(String(500),default='')
+    journal=relationship('ExpenseJournal',back_populates='lines'); expense_item=relationship('ExpenseItem')
+class OtherAccountJournal(Base):
+    __tablename__='other_account_journals'
+    id=Column(Integer,primary_key=True); journal_no=Column(String(30),unique=True,nullable=False,index=True); journal_date=Column(Date,nullable=False,index=True); transaction_type=Column(String(20),nullable=False,index=True); status=Column(String(20),default='draft',nullable=False,index=True); notes=Column(String(500),default=''); created_at=Column(DateTime,default=datetime.utcnow,nullable=False); updated_at=Column(DateTime,default=datetime.utcnow,onupdate=datetime.utcnow,nullable=False); posted_at=Column(DateTime)
+    lines=relationship('OtherAccountLine',back_populates='journal',cascade='all, delete-orphan',order_by='OtherAccountLine.id'); total_amount=property(lambda s:sum(x.amount or 0 for x in s.lines))
+class OtherAccountLine(Base):
+    __tablename__='other_account_lines'
+    id=Column(Integer,primary_key=True); journal_id=Column(Integer,ForeignKey('other_account_journals.id'),nullable=False,index=True); account_id=Column(Integer,ForeignKey('other_account_items.id'),nullable=False,index=True); amount=Column(Float,default=0,nullable=False); description=Column(String(500),default='')
+    journal=relationship('OtherAccountJournal',back_populates='lines'); account=relationship('OtherAccountItem')
