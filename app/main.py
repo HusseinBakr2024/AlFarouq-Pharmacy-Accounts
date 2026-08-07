@@ -719,7 +719,7 @@ def supplier_claims(request:Request,supplier_id:Optional[int]=None,date_from:Opt
                     "pharmacy_value": line.pharmacy_value or 0,
                     "public_value": line.public_value or 0,
                     "avg_discount": discount,
-                    "notes": line.journal.notes or "",
+                    "notes": (line.description or line.notes or line.journal.notes or "").strip(),
                     "value": value,
                 })
             invoice_count = len(movements)
