@@ -833,6 +833,42 @@ body {
     border-radius: 20px;
 }
 
+.toast-container {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 2200;
+    padding: 12px;
+}
+
+.toast {
+    min-width: 220px;
+    max-width: 380px;
+    padding: 12px 18px;
+    color: #ffffff;
+    background: rgba(18, 73, 63, 0.95);
+    border-radius: 12px;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.18);
+    opacity: 0;
+    transform: translateY(-10px) scale(0.98);
+    transition: opacity 0.18s ease, transform 0.18s ease;
+    text-align: center;
+    pointer-events: none;
+    font-size: 13px;
+}
+
+.toast.visible {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+.toast.error {
+    background: rgba(169, 59, 59, 0.95);
+}
+
 /* تثبيت شريط Created by أسفل الشاشة */
 .system-footer {
     position: relative;

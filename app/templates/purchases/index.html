@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="workspace journal-layout-page purchase-workspace {% if journal and journal.entry_type=='notice' %}notice-mode{% endif %}">
-{% if message %}<div class="alert-success">{{ message }}</div>{% endif %}
 <div class="journal-two-column">
 <aside class="journal-browser">
   <form method="get" action="/purchases" class="journal-browser-search">

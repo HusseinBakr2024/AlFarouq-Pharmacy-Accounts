@@ -4,7 +4,7 @@ from io import BytesIO
 from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from openpyxl import Workbook
@@ -85,6 +85,12 @@ def render(request: Request, template_name: str, page_title: str, active_page: s
     finally:notification_db.close()
     context.update({"request": request, "page_title": page_title, "active_page": active_page,"check_notification":notification})
     return templates.TemplateResponse(request=request, name=template_name, context=context)
+
+
+def ajax_or_redirect(request: Request, message: str, redirect_url: str, success: bool = True):
+    if request.headers.get("x-requested-with") == "XMLHttpRequest":
+        return JSONResponse({"success": success, "message": message})
+    return RedirectResponse(redirect_url, status_code=303)
 
 
 def parse_date(value: Optional[str], default: Optional[date] = None) -> Optional[date]:
@@ -226,10 +232,10 @@ async def save_sales(request: Request, db: Session = Depends(get_db)):
     treasury_id = int(form.get("treasury_id") or 0)
 
     if not branch_id or not treasury_id:
-        return RedirectResponse("/sales?message=يجب اختيار الفرع والخزينة", status_code=303)
+        return ajax_or_redirect(request, "يجب اختيار الفرع والخزينة", "/sales?message=يجب اختيار الفرع والخزينة", success=False)
     treasury=db.query(Treasury).filter(Treasury.id==treasury_id,Treasury.is_active.is_(True)).first()
     if not treasury or treasury.branch_id!=branch_id:
-        return RedirectResponse("/sales?message=الخزينة المختارة لا تتبع الفرع",status_code=303)
+        return ajax_or_redirect(request, "الخزينة المختارة لا تتبع الفرع", "/sales?message=الخزينة المختارة لا تتبع الفرع", success=False)
 
     employee_ids = form.getlist("employee_id")
     shift_values = form.getlist("shift_value")
@@ -250,7 +256,7 @@ async def save_sales(request: Request, db: Session = Depends(get_db)):
         valid_lines.append((int(employee_id), shift, discount, net_cash, difference))
 
     if not valid_lines:
-        return RedirectResponse("/sales?message=أدخل حركة مبيعات واحدة على الأقل", status_code=303)
+        return ajax_or_redirect(request, "أدخل حركة مبيعات واحدة على الأقل", "/sales?message=أدخل حركة مبيعات واحدة على الأقل", success=False)
 
     valid_employee_ids = {
         row.id for row in db.query(Employee).filter(
@@ -260,12 +266,12 @@ async def save_sales(request: Request, db: Session = Depends(get_db)):
         ).all()
     }
     if len(valid_employee_ids) != len({line[0] for line in valid_lines}):
-        return RedirectResponse("/sales?message=يوجد مستخدم غير تابع للفرع المختار", status_code=303)
+        return ajax_or_redirect(request, "يوجد مستخدم غير تابع للفرع المختار", "/sales?message=يوجد مستخدم غير تابع للفرع المختار", success=False)
 
     if journal_id:
         journal = db.query(SalesJournal).options(joinedload(SalesJournal.lines)).filter(SalesJournal.id == journal_id).first()
         if not journal or journal.status == "posted":
-            return RedirectResponse("/sales?message=لا يمكن تعديل هذه اليومية", status_code=303)
+            return ajax_or_redirect(request, "لا يمكن تعديل هذه اليومية", "/sales?message=لا يمكن تعديل هذه اليومية", success=False)
         journal.journal_date = journal_date
         journal.branch_id = branch_id
         journal.notes = notes
@@ -273,7 +279,7 @@ async def save_sales(request: Request, db: Session = Depends(get_db)):
     else:
         duplicate = db.query(SalesJournal).filter(SalesJournal.branch_id == branch_id, SalesJournal.journal_date == journal_date).first()
         if duplicate:
-            return RedirectResponse(f"/sales?edit_id={duplicate.id}&message=توجد يومية لهذا الفرع والتاريخ وتم فتحها للتعديل", status_code=303)
+            return ajax_or_redirect(request, f"توجد يومية لهذا الفرع والتاريخ وتم فتحها للتعديل", f"/sales?edit_id={duplicate.id}&message=توجد يومية لهذا الفرع والتاريخ وتم فتحها للتعديل", success=False)
         journal = SalesJournal(journal_no=next_journal_no(db, journal_date), journal_date=journal_date, branch_id=branch_id, notes=notes)
         db.add(journal)
 
@@ -287,7 +293,7 @@ async def save_sales(request: Request, db: Session = Depends(get_db)):
         journal.treasury_deposit=TreasuryDeposit(treasury_id=treasury_id,amount=total_net)
 
     db.commit()
-    return RedirectResponse("/sales?message=تم حفظ يومية المبيعات بنجاح", status_code=303)
+    return ajax_or_redirect(request, "تم حفظ اليومية بنجاح", "/sales?message=تم حفظ اليومية بنجاح")
 
 
 @app.get("/review", response_class=HTMLResponse)
@@ -447,8 +453,8 @@ async def save_purchases(request: Request, db: Session=Depends(get_db)):
     f=await request.form(); jid=int(f.get("journal_id") or 0); d=parse_date(str(f.get("journal_date") or ""),date.today()); et=str(f.get("entry_type") or "purchase")
     fixed_notice_types={"مرتجع":-1,"لم يصل":-1,"خصم إضافي":-1,"ت. إضافية":1,"غرامة":-1,"أخرى":1}
     journal_notice_type=str(f.get("notice_type") or "").strip() if et=="notice" else ""
-    if et not in {"purchase","notice"}: return RedirectResponse("/purchases?message=اختر نوع اليومية",303)
-    if et=="notice" and journal_notice_type not in fixed_notice_types: return RedirectResponse("/purchases?message=اختر نوع الإشعار",303)
+    if et not in {"purchase","notice"}: return ajax_or_redirect(request, "اختر نوع اليومية", "/purchases?message=اختر نوع اليومية", success=False)
+    if et=="notice" and journal_notice_type not in fixed_notice_types: return ajax_or_redirect(request, "اختر نوع الإشعار", "/purchases?message=اختر نوع الإشعار", success=False)
     supplier_ids=f.getlist("supplier_id"); docs=f.getlist("document_no"); pvs=f.getlist("pharmacy_value"); pubs=f.getlist("public_value"); descs=f.getlist("description"); notes=f.getlist("line_notes")
     rows=[]
     for i,sid in enumerate(supplier_ids):
@@ -456,24 +462,24 @@ async def save_purchases(request: Request, db: Session=Depends(get_db)):
         pv=float(pvs[i] or 0); pub=float(pubs[i] or 0); disc=abs(((pv/pub)*100)-100) if pub else 0; nt=""; effect=pv
         if et=="notice":
             nt=journal_notice_type
-            if pv <= 0:return RedirectResponse("/purchases?message=أدخل القيمة صيدلي للإشعار",303)
-            if pub <= 0:return RedirectResponse("/purchases?message=أدخل القيمة جمهور للإشعار",303)
-            if not (descs[i].strip() if i<len(descs) else ""):return RedirectResponse("/purchases?message=أدخل البيان لكل سطر إشعار",303)
+            if pv <= 0:return ajax_or_redirect(request, "أدخل القيمة صيدلي للإشعار", "/purchases?message=أدخل القيمة صيدلي للإشعار", success=False)
+            if pub <= 0:return ajax_or_redirect(request, "أدخل القيمة جمهور للإشعار", "/purchases?message=أدخل القيمة جمهور للإشعار", success=False)
+            if not (descs[i].strip() if i<len(descs) else ""):return ajax_or_redirect(request, "أدخل البيان لكل سطر إشعار", "/purchases?message=أدخل البيان لكل سطر إشعار", success=False)
             effect=abs(pv) * fixed_notice_types[nt]
         rows.append((int(sid),docs[i].strip(),nt,pv,pub,max(disc,0),effect,descs[i] if i<len(descs) else "",notes[i] if i<len(notes) else ""))
-    if not rows: return RedirectResponse("/purchases?message=أدخل حركة واحدة على الأقل",303)
+    if not rows: return ajax_or_redirect(request, "أدخل حركة واحدة على الأقل", "/purchases?message=أدخل حركة واحدة على الأقل", success=False)
     for sid,doc,*_ in rows:
         dup=db.query(PurchaseLine).filter(PurchaseLine.supplier_id==sid,PurchaseLine.document_no==doc,PurchaseLine.entry_type==et)
         if jid: dup=dup.filter(PurchaseLine.journal_id!=jid)
-        if dup.first(): return RedirectResponse(f"/purchases?message=رقم المستند {doc} مكرر لنفس المورد",303)
+        if dup.first(): return ajax_or_redirect(request, f"رقم المستند {doc} مكرر لنفس المورد", f"/purchases?message=رقم المستند {doc} مكرر لنفس المورد", success=False)
     if jid:
         j=db.query(PurchaseJournal).options(joinedload(PurchaseJournal.lines)).filter(PurchaseJournal.id==jid).first()
-        if not j or j.status=="posted": return RedirectResponse("/purchases?message=لا يمكن تعديل اليومية",303)
+        if not j or j.status=="posted": return ajax_or_redirect(request, "لا يمكن تعديل اليومية", "/purchases?message=لا يمكن تعديل اليومية", success=False)
         j.journal_date=d; j.entry_type=et; j.notice_type=journal_notice_type; j.lines.clear()
     else:
         j=PurchaseJournal(journal_no=next_purchase_no(db,d),journal_date=d,entry_type=et,notice_type=journal_notice_type); db.add(j)
     for sid,doc,nt,pv,pub,disc,effect,des,ntes in rows: j.lines.append(PurchaseLine(supplier_id=sid,entry_type=et,document_no=doc,notice_type=nt,pharmacy_value=pv,public_value=pub,discount_percent=disc,account_effect=effect,description=des,notes=ntes))
-    db.commit(); return RedirectResponse("/purchases?message=تم حفظ اليومية بنجاح",303)
+    db.commit(); return ajax_or_redirect(request, "تم حفظ اليومية بنجاح", "/purchases?message=تم حفظ اليومية بنجاح")
 
 @app.post("/purchases/{journal_id}/post")
 def post_purchase(journal_id:int,db:Session=Depends(get_db)):
@@ -516,23 +522,23 @@ def expenses(request:Request,edit_id:Optional[int]=None,search:str="",status:str
 @app.post("/expenses/save")
 async def save_expenses(request:Request,db:Session=Depends(get_db)):
     f=await request.form(); jid=int(f.get("journal_id") or 0); d=parse_date(f.get("journal_date"),date.today()); kind=str(f.get("expense_type") or ""); branch_id=int(f.get("branch_id") or 0) or None
-    if kind not in {"operating","general"}:return RedirectResponse("/expenses?message=اختر نوع المصروف",303)
-    if kind=="operating" and not branch_id:return RedirectResponse("/expenses?message=الفرع مطلوب للمصروف التشغيلي",303)
+    if kind not in {"operating","general"}:return ajax_or_redirect(request, "اختر نوع المصروف", "/expenses?message=اختر نوع المصروف", success=False)
+    if kind=="operating" and not branch_id:return ajax_or_redirect(request, "الفرع مطلوب للمصروف التشغيلي", "/expenses?message=الفرع مطلوب للمصروف التشغيلي", success=False)
     if kind=="general":branch_id=None
     ids=f.getlist("expense_item_id"); amounts=f.getlist("amount"); notes=f.getlist("line_notes"); rows=[]
     for i,item_id in enumerate(ids):
         amount=float(amounts[i] or 0)
         if item_id and amount>0:rows.append((int(item_id),amount,notes[i].strip() if i<len(notes) else ""))
-    if not rows:return RedirectResponse("/expenses?message=أدخل حركة مصروف واحدة على الأقل",303)
+    if not rows:return ajax_or_redirect(request, "أدخل حركة مصروف واحدة على الأقل", "/expenses?message=أدخل حركة مصروف واحدة على الأقل", success=False)
     valid={x.id for x in db.query(ExpenseItem).filter(ExpenseItem.id.in_([x[0] for x in rows]),ExpenseItem.expense_type==kind,ExpenseItem.is_active.is_(True)).all()}
-    if len(valid)!=len(set(x[0] for x in rows)):return RedirectResponse("/expenses?message=يوجد حساب لا يطابق نوع المصروف",303)
+    if len(valid)!=len(set(x[0] for x in rows)):return ajax_or_redirect(request, "يوجد حساب لا يطابق نوع المصروف", "/expenses?message=يوجد حساب لا يطابق نوع المصروف", success=False)
     if jid:
         j=db.query(ExpenseJournal).options(joinedload(ExpenseJournal.lines)).filter(ExpenseJournal.id==jid).first()
-        if not j or j.status=="posted":return RedirectResponse("/expenses?message=لا يمكن تعديل اليومية",303)
+        if not j or j.status=="posted":return ajax_or_redirect(request, "لا يمكن تعديل اليومية", "/expenses?message=لا يمكن تعديل اليومية", success=False)
         j.journal_date=d;j.expense_type=kind;j.branch_id=branch_id;j.lines.clear()
     else:j=ExpenseJournal(journal_no=next_number(db,ExpenseJournal,"EJ",d),journal_date=d,expense_type=kind,branch_id=branch_id);db.add(j)
     for item_id,amount,note in rows:j.lines.append(ExpenseLine(expense_item_id=item_id,amount=amount,notes=note))
-    db.commit();db.refresh(j);return RedirectResponse(f"/expenses?edit_id={j.id}&choose_treasury=1&message=تم حفظ اليومية، اختر خزينة الصرف",303)
+    db.commit();db.refresh(j);return ajax_or_redirect(request, "تم حفظ اليومية بنجاح", "/expenses?message=تم حفظ اليومية بنجاح")
 
 @app.post("/expenses/{journal_id}/treasury")
 async def save_expense_treasury(journal_id:int,request:Request,db:Session=Depends(get_db)):
@@ -565,21 +571,21 @@ def other_accounts(request:Request,edit_id:Optional[int]=None,search:str="",stat
 @app.post("/other-accounts/save")
 async def save_other_accounts(request:Request,db:Session=Depends(get_db)):
     f=await request.form();jid=int(f.get("journal_id") or 0);d=parse_date(f.get("journal_date"),date.today());kind=str(f.get("transaction_type") or "")
-    if kind not in {"funding","withdrawal"}:return RedirectResponse("/other-accounts?message=اختر نوع الحركة",303)
+    if kind not in {"funding","withdrawal"}:return ajax_or_redirect(request, "اختر نوع الحركة", "/other-accounts?message=اختر نوع الحركة", success=False)
     ids=f.getlist("account_id");amounts=f.getlist("amount");descriptions=f.getlist("description");rows=[]
     for i,account_id in enumerate(ids):
         amount=float(amounts[i] or 0)
         if account_id and amount>0:rows.append((int(account_id),amount,descriptions[i].strip() if i<len(descriptions) else ""))
-    if not rows:return RedirectResponse("/other-accounts?message=أدخل حركة واحدة على الأقل",303)
+    if not rows:return ajax_or_redirect(request, "أدخل حركة واحدة على الأقل", "/other-accounts?message=أدخل حركة واحدة على الأقل", success=False)
     valid={x.id for x in db.query(OtherAccountItem).filter(OtherAccountItem.id.in_([x[0] for x in rows]),OtherAccountItem.is_active.is_(True)).all()}
-    if len(valid)!=len(set(x[0] for x in rows)):return RedirectResponse("/other-accounts?message=يوجد حساب غير صالح",303)
+    if len(valid)!=len(set(x[0] for x in rows)):return ajax_or_redirect(request, "يوجد حساب غير صالح", "/other-accounts?message=يوجد حساب غير صالح", success=False)
     if jid:
         j=db.query(OtherAccountJournal).options(joinedload(OtherAccountJournal.lines)).filter(OtherAccountJournal.id==jid).first()
-        if not j or j.status=="posted":return RedirectResponse("/other-accounts?message=لا يمكن تعديل اليومية",303)
+        if not j or j.status=="posted":return ajax_or_redirect(request, "لا يمكن تعديل اليومية", "/other-accounts?message=لا يمكن تعديل اليومية", success=False)
         j.journal_date=d;j.transaction_type=kind;j.lines.clear()
     else:j=OtherAccountJournal(journal_no=next_number(db,OtherAccountJournal,"OJ",d),journal_date=d,transaction_type=kind);db.add(j)
     for account_id,amount,description in rows:j.lines.append(OtherAccountLine(account_id=account_id,amount=amount,description=description))
-    db.commit();return RedirectResponse("/other-accounts?message=تم حفظ يومية الحسابات الأخرى بنجاح",303)
+    db.commit();return ajax_or_redirect(request, "تم حفظ اليومية بنجاح", "/other-accounts?message=تم حفظ اليومية بنجاح")
 
 @app.post("/other-accounts/{journal_id}/post")
 def post_other_account(journal_id:int,db:Session=Depends(get_db)):

@@ -64,7 +64,114 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const salesTable = document.getElementById("salesEntryTable");
     if (salesTable) initSalesEntry(salesTable);
+    initJournalAjaxForms();
 });
+
+function createToastContainer() {
+    let container = document.getElementById("globalToastContainer");
+    if (!container) {
+        container = document.createElement("div");
+        container.id = "globalToastContainer";
+        container.className = "toast-container";
+        document.body.appendChild(container);
+    }
+    return container;
+}
+
+function showToast(message, type = "success") {
+    const container = createToastContainer();
+    const toast = document.createElement("div");
+    toast.className = "toast " + type;
+    toast.textContent = message;
+    container.appendChild(toast);
+    requestAnimationFrame(() => {
+        toast.classList.add("visible");
+    });
+    setTimeout(() => {
+        toast.classList.remove("visible");
+        toast.addEventListener("transitionend", () => toast.remove(), { once: true });
+    }, 1500);
+}
+
+function resetJournalForm(form) {
+    form.reset();
+    const journalIdInput = form.querySelector('input[name="journal_id"]');
+    if (journalIdInput) {
+        journalIdInput.value = "";
+        journalIdInput.removeAttribute('value');
+    }
+    form.querySelectorAll('input[name="treasury_id"]').forEach((input) => input.remove());
+    const dateInput = form.querySelector('input[name="journal_date"]');
+    if (dateInput) {
+        const now = new Date();
+        const day = String(now.getDate()).padStart(2, "0");
+        const month = String(now.getMonth() + 1).padStart(2, "0");
+        const year = now.getFullYear();
+        dateInput.value = `${day}/${month}/${year}`;
+    }
+    const tbody = form.querySelector(".journal-scroll-area tbody");
+    if (tbody) {
+        const rows = Array.from(tbody.querySelectorAll("tr"));
+        rows.slice(1).forEach((row) => row.remove());
+        const firstRow = rows[0];
+        if (firstRow) {
+            firstRow.querySelectorAll("input, select, textarea").forEach((field) => {
+                if (field.tagName === "SELECT") {
+                    field.selectedIndex = 0;
+                } else if (field.type === "checkbox" || field.type === "radio") {
+                    field.checked = false;
+                } else {
+                    field.value = "";
+                }
+            });
+        }
+        tbody.querySelectorAll("tr").forEach((row, index) => {
+            const numberCell = row.querySelector(".row-number");
+            if (numberCell) numberCell.textContent = index + 1;
+        });
+    }
+    form.querySelectorAll("select, input").forEach((field) => {
+        field.dispatchEvent(new Event("change", { bubbles: true }));
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const firstField = form.querySelector("select:not([disabled]), input:not([readonly]):not([disabled])");
+    if (firstField) firstField.focus();
+}
+
+function initJournalAjaxSave(form) {
+    if (!form || form.dataset.ajaxInitialized === "1") return;
+    form.dataset.ajaxInitialized = "1";
+    form.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        if (form.dataset.readonly === "1") return;
+        const action = form.action;
+        const method = form.method || "POST";
+        const payload = new FormData(form);
+        try {
+            const response = await fetch(action, {
+                method,
+                headers: {
+                    "x-requested-with": "XMLHttpRequest",
+                },
+                body: payload,
+            });
+            const data = await response.json();
+            if (!data || !data.success) {
+                showToast(data?.message || "حدث خطأ أثناء الحفظ", "error");
+                return;
+            }
+            showToast(data.message || "تم حفظ اليومية بنجاح", "success");
+            resetJournalForm(form);
+        } catch (error) {
+            showToast("فشل الاتصال بالسيرفر", "error");
+            console.error(error);
+        }
+    });
+}
+
+function initJournalAjaxForms() {
+    document.querySelectorAll(".journal-entry-form").forEach((form) => initJournalAjaxSave(form));
+}
 
 function initSalesEntry(table) {
     const tbody = table.querySelector("tbody");

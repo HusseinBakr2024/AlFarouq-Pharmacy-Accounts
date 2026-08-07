@@ -3,10 +3,6 @@
 
 <div class="workspace journal-layout-page expense-workspace">
 
-{% if message %}
-<div class="alert-success">{{ message }}</div>
-{% endif %}
-
 <div class="journal-two-column">
 
 <aside class="journal-browser">
@@ -95,6 +91,7 @@
   method="post"
   action="/expenses/save"
   id="expenseForm"
+  data-readonly="{{ '1' if readonly else '0' }}"
   class="journal-entry-form"
 >
 
