@@ -479,7 +479,6 @@
     <select
       id="expenseTreasuryPicker"
       name="treasury_id"
-      required
     >
 
       <option value="">
@@ -731,6 +730,8 @@ function updateExpenseTreasuryOptions(){
 form.addEventListener('submit', e => {
   if (!form.querySelector('input[name="treasury_id"]')) {
     e.preventDefault();
+    form.querySelectorAll('input[name="treasury_id"]').forEach(node => node.remove());
+    calc();
     updateExpenseTreasuryOptions();
     updateExpenseTreasuryAmount();
     dialog.showModal();
@@ -752,6 +753,7 @@ document
     'click',
     () => {
       if(!treasuryPicker.value){
+        showToast('اختر الخزينة', 'error');
         treasuryPicker.focus();
         return;
       }
@@ -764,7 +766,11 @@ document
       }
       hidden.value = treasuryPicker.value;
       dialog.close();
-      form.requestSubmit();
+      if (typeof form.requestSubmit === 'function') {
+        form.requestSubmit();
+      } else {
+        submitFormWithEvent(form);
+      }
     }
   );
 

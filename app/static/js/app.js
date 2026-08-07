@@ -282,9 +282,20 @@ function initSalesEntry(table) {
     });
     document.getElementById("closeTreasuryDialog")?.addEventListener("click", () => dialog?.close());
     document.getElementById("confirmSalesSave")?.addEventListener("click", () => {
-        if (!treasuryPicker?.value) { treasuryPicker?.reportValidity(); return; }
-        const hidden=document.createElement("input"); hidden.type="hidden"; hidden.name="treasury_id"; hidden.value=treasuryPicker.value; form.appendChild(hidden);
-        if (typeof form.requestSubmit === "function") {
+        if (!treasuryPicker?.value) {
+            showToast('اختر الخزينة', 'error');
+            treasuryPicker?.focus();
+            return;
+        }
+        let hidden = form.querySelector('input[name="treasury_id"]');
+        if (!hidden) {
+            hidden = document.createElement('input');
+            hidden.type = 'hidden';
+            hidden.name = 'treasury_id';
+            form.appendChild(hidden);
+        }
+        hidden.value = treasuryPicker.value;
+        if (typeof form.requestSubmit === 'function') {
             form.requestSubmit();
         } else {
             submitFormWithEvent(form);

@@ -840,7 +840,7 @@ body {
     align-items: center;
     justify-content: center;
     pointer-events: none;
-    z-index: 2200;
+    z-index: 200000;
     padding: 12px;
 }
 
@@ -858,6 +858,14 @@ body {
     text-align: center;
     pointer-events: none;
     font-size: 13px;
+}
+
+.erp-dialog {
+    z-index: 10000;
+}
+
+.erp-dialog::backdrop {
+    z-index: 9000;
 }
 
 .toast.visible {
