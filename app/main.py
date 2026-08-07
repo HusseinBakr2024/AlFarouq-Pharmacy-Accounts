@@ -1,4 +1,5 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
+import calendar
 from io import BytesIO
 from typing import Optional
 
@@ -16,7 +17,9 @@ from sqlalchemy.orm import Session, joinedload
 from app.database import Base, SessionLocal, engine, get_db
 from app.models import (Branch, Employee, Supplier, SalesJournal, SalesLine, PurchaseJournal, PurchaseLine,
     User, Customer, Treasury, Bank, ExpenseItem, OtherAccountItem, OpeningStock, TreasuryDeposit,
-    ExpenseJournal, ExpenseLine, ExpenseTreasuryPayment, OtherAccountJournal, OtherAccountLine)
+    ExpenseJournal, ExpenseLine, ExpenseTreasuryPayment, OtherAccountJournal, OtherAccountLine,
+    SupplierClaim, SupplierClaimLine, SupplierPaymentJournal, SupplierPaymentAllocation,
+    GeneralCheckJournal, IssuedCheck, NotificationRead)
 
 Base.metadata.create_all(bind=engine)
 
@@ -73,7 +76,14 @@ seed_master_data()
 
 
 def render(request: Request, template_name: str, page_title: str, active_page: str, **context):
-    context.update({"request": request, "page_title": page_title, "active_page": active_page})
+    notification=None; notification_db=SessionLocal()
+    try:
+        due=notification_db.query(IssuedCheck).filter(IssuedCheck.status=="issued",IssuedCheck.due_date>=date.today(),IssuedCheck.due_date<=date.today()+timedelta(days=4)).order_by(IssuedCheck.id).all()
+        if due:
+            key="due-checks:"+",".join(str(x.id) for x in due)
+            if not notification_db.query(NotificationRead).filter(NotificationRead.notification_key==key).first():notification={"key":key,"count":len(due),"total":sum(x.amount for x in due)}
+    finally:notification_db.close()
+    context.update({"request": request, "page_title": page_title, "active_page": active_page,"check_notification":notification})
     return templates.TemplateResponse(request=request, name=template_name, context=context)
 
 
@@ -282,16 +292,18 @@ async def save_sales(request: Request, db: Session = Depends(get_db)):
 
 @app.get("/review", response_class=HTMLResponse)
 def unified_review(request: Request, type: str="sales", search: str="", db: Session=Depends(get_db)):
-    allowed={"sales","purchases","expenses","other_accounts","supplier_payments"}
+    allowed={"sales","purchases","expenses","other_accounts","supplier_payments","general_checks"}
     if type not in allowed:type="sales"
     if type=="purchases":
         all_items=db.query(PurchaseJournal).options(joinedload(PurchaseJournal.lines).joinedload(PurchaseLine.supplier)).order_by(PurchaseJournal.journal_date.desc(),PurchaseJournal.id.desc()).all()
     elif type=="expenses":all_items=db.query(ExpenseJournal).options(joinedload(ExpenseJournal.branch),joinedload(ExpenseJournal.lines).joinedload(ExpenseLine.expense_item)).order_by(ExpenseJournal.journal_date.desc(),ExpenseJournal.id.desc()).all()
     elif type=="other_accounts":all_items=db.query(OtherAccountJournal).options(joinedload(OtherAccountJournal.lines).joinedload(OtherAccountLine.account)).order_by(OtherAccountJournal.journal_date.desc(),OtherAccountJournal.id.desc()).all()
+    elif type=="supplier_payments":all_items=db.query(SupplierPaymentJournal).options(joinedload(SupplierPaymentJournal.supplier),joinedload(SupplierPaymentJournal.allocations)).order_by(SupplierPaymentJournal.journal_date.desc(),SupplierPaymentJournal.id.desc()).all()
+    elif type=="general_checks":all_items=db.query(GeneralCheckJournal).options(joinedload(GeneralCheckJournal.account),joinedload(GeneralCheckJournal.checks)).order_by(GeneralCheckJournal.journal_date.desc(),GeneralCheckJournal.id.desc()).all()
     elif type=="sales":all_items=db.query(SalesJournal).options(joinedload(SalesJournal.branch),joinedload(SalesJournal.lines).joinedload(SalesLine.employee)).order_by(SalesJournal.journal_date.desc(),SalesJournal.id.desc()).all()
     else:all_items=[]
     items=[x for x in all_items if x.status=="draft" and (not search or search.lower() in x.journal_no.lower())]
-    totals={"draft":len(items),"lines":sum(len(x.lines) for x in items),"value":sum((x.total_net_cash if type=="sales" else x.total_effect if type=="purchases" else x.total_amount) for x in items)}
+    totals={"draft":len(items),"lines":sum(len(x.lines) for x in items),"value":sum((x.total_net_cash if type=="sales" else x.total_effect if type in {"purchases","general_checks"} else x.total_amount) for x in items)}
     return render(request,"sales/review.html","مراجعة وترحيل","review",journals=items,totals=totals,selected_type=type,search=search,message=request.query_params.get("message",""))
 
 @app.get("/sales/review")
@@ -606,6 +618,198 @@ def export_other_accounts(account_id:Optional[int]=None,status:str="all",journal
     if date_to:q=q.filter(OtherAccountJournal.journal_date<=parse_date(date_to))
     rows=[[x.journal.journal_no,x.journal.journal_date.strftime("%d/%m/%Y"),"تمويل" if x.journal.transaction_type=="funding" else "سحب أول",x.account.name,x.amount,x.description,"مرحلة" if x.journal.status=="posted" else "غير مرحلة"] for x in q.order_by(OtherAccountJournal.journal_date,OtherAccountLine.id).all()]
     return journal_export("تقرير الحسابات الأخرى",["اليومية","التاريخ","نوع الحركة","الحساب","المبلغ","البيان","الحالة"],rows,"AlFarouq_Other_Accounts_Report.xlsx")
+
+def treasury_available_balance(db:Session,treasury_id:int)->float:
+    treasury=db.get(Treasury,treasury_id)
+    if not treasury:return 0
+    sales=db.query(func.coalesce(func.sum(TreasuryDeposit.amount),0)).join(SalesJournal).filter(TreasuryDeposit.treasury_id==treasury_id,SalesJournal.status=="posted").scalar() or 0
+    expenses=db.query(func.coalesce(func.sum(ExpenseTreasuryPayment.amount),0)).join(ExpenseJournal).filter(ExpenseTreasuryPayment.treasury_id==treasury_id,ExpenseJournal.status=="posted").scalar() or 0
+    payments=db.query(func.coalesce(func.sum(SupplierPaymentJournal.total_amount),0)).filter(SupplierPaymentJournal.treasury_id==treasury_id,SupplierPaymentJournal.payment_method=="cash",SupplierPaymentJournal.status=="posted").scalar() or 0
+    return (treasury.opening_balance or 0)+sales-expenses-payments
+
+def purchase_movement_name(line:PurchaseLine)->str:
+    if line.entry_type=="purchase":return "فاتورة شراء"
+    notice=line.notice_type or (line.journal.notice_type if line.journal else "")
+    if notice=="مرتجع":return "إشعار مرتجع"
+    if notice in {"خصم إضافي","لم يصل","غرامة"}:return "إشعار خصم"
+    if notice=="ت. إضافية":return "تكلفة إضافية"
+    return "إشعار"
+
+def next_claim_no(db:Session,d:date)->str:
+    prefix=f"CLM-{d.year}-";last=db.query(func.max(SupplierClaim.claim_no)).filter(SupplierClaim.claim_no.like(f"{prefix}%")).scalar();seq=int(last.rsplit("-",1)[-1])+1 if last else 1;return f"{prefix}{seq:05d}"
+
+@app.get("/supplier-claims",response_class=HTMLResponse)
+def supplier_claims(request:Request,supplier_id:Optional[int]=None,db:Session=Depends(get_db)):
+    movements=[];balance=0
+    if supplier_id:
+        supplier=db.get(Supplier,supplier_id);balance=(supplier.opening_credit or 0)-(supplier.opening_debit or 0) if supplier else 0
+        claimed=db.query(SupplierClaimLine.purchase_line_id)
+        lines=db.query(PurchaseLine).join(PurchaseJournal).options(joinedload(PurchaseLine.journal)).filter(PurchaseLine.supplier_id==supplier_id,PurchaseJournal.status=="posted",~PurchaseLine.id.in_(claimed)).order_by(PurchaseJournal.journal_date,PurchaseLine.document_no,PurchaseLine.id).all()
+        for line in lines:
+            value=line.account_effect or 0;balance+=value;movements.append({"line":line,"type":purchase_movement_name(line),"value":value,"paid":0,"remaining":value,"balance":balance})
+    claims=db.query(SupplierClaim).options(joinedload(SupplierClaim.supplier)).order_by(SupplierClaim.claim_date.desc(),SupplierClaim.id.desc()).limit(100).all()
+    return render(request,"supplier/claims.html","مراجعة مطالبات المورد","supplier_claims",suppliers=db.query(Supplier).filter(Supplier.is_active.is_(True)).order_by(Supplier.name).all(),supplier_id=supplier_id,movements=movements,claims=claims,today=date.today().strftime("%d/%m/%Y"),message=request.query_params.get("message",""))
+
+@app.post("/supplier-claims/create")
+async def create_supplier_claim(request:Request,db:Session=Depends(get_db)):
+    f=await request.form();supplier_id=int(f.get("supplier_id") or 0);ids={int(x) for x in f.getlist("purchase_line_id") if str(x).isdigit()};d=parse_date(f.get("claim_date"),date.today())
+    if not supplier_id or not ids:return RedirectResponse(f"/supplier-claims?supplier_id={supplier_id}&message=اختر حركة واحدة على الأقل",303)
+    already={x[0] for x in db.query(SupplierClaimLine.purchase_line_id).filter(SupplierClaimLine.purchase_line_id.in_(ids)).all()}
+    lines=db.query(PurchaseLine).join(PurchaseJournal).filter(PurchaseLine.id.in_(ids),PurchaseLine.supplier_id==supplier_id,PurchaseJournal.status=="posted").all()
+    if already or len(lines)!=len(ids):return RedirectResponse(f"/supplier-claims?supplier_id={supplier_id}&message=توجد حركة غير متاحة أو تمت المطالبة بها",303)
+    total=sum(x.account_effect or 0 for x in lines)
+    if total<=0:return RedirectResponse(f"/supplier-claims?supplier_id={supplier_id}&message=إجمالي المطالبة يجب أن يكون أكبر من صفر",303)
+    claim=SupplierClaim(claim_no=next_claim_no(db,d),claim_date=d,supplier_id=supplier_id,total_amount=total,status="ready");db.add(claim)
+    for line in lines:claim.lines.append(SupplierClaimLine(purchase_line_id=line.id,amount=line.account_effect or 0))
+    try:db.commit()
+    except IntegrityError:db.rollback();return RedirectResponse(f"/supplier-claims?supplier_id={supplier_id}&message=تعذر الاعتماد لأن إحدى الحركات مرتبطة بمطالبة أخرى",303)
+    return RedirectResponse(f"/supplier-claims?supplier_id={supplier_id}&message=تم اعتماد المطالبة وأصبحت جاهزة للسداد",303)
+
+@app.get("/supplier-payments",response_class=HTMLResponse)
+def supplier_payments(request:Request,supplier_id:Optional[int]=None,db:Session=Depends(get_db)):
+    claims=db.query(SupplierClaim).filter(SupplierClaim.supplier_id==supplier_id,SupplierClaim.status=="ready").order_by(SupplierClaim.claim_date,SupplierClaim.claim_no).all() if supplier_id else []
+    treasuries=db.query(Treasury).filter(Treasury.is_active.is_(True)).order_by(Treasury.name).all()
+    balances={x.id:treasury_available_balance(db,x.id) for x in treasuries}
+    journals=db.query(SupplierPaymentJournal).options(joinedload(SupplierPaymentJournal.supplier)).order_by(SupplierPaymentJournal.journal_date.desc(),SupplierPaymentJournal.id.desc()).limit(100).all()
+    return render(request,"supplier/payments.html","سداد الموردين","supplier_payments",suppliers=db.query(Supplier).filter(Supplier.is_active.is_(True)).order_by(Supplier.name).all(),supplier_id=supplier_id,claims=claims,treasuries=treasuries,treasury_balances=balances,banks=db.query(Bank).filter(Bank.is_active.is_(True)).order_by(Bank.name).all(),journals=journals,today=date.today().strftime("%d/%m/%Y"),message=request.query_params.get("message",""))
+
+@app.post("/supplier-payments/save")
+async def save_supplier_payment(request:Request,db:Session=Depends(get_db)):
+    f=await request.form();supplier_id=int(f.get("supplier_id") or 0);method=str(f.get("payment_method") or "");claim_ids={int(x) for x in f.getlist("claim_id") if str(x).isdigit()};d=parse_date(f.get("journal_date"),date.today())
+    claims=db.query(SupplierClaim).filter(SupplierClaim.id.in_(claim_ids),SupplierClaim.supplier_id==supplier_id,SupplierClaim.status=="ready").all() if claim_ids else []
+    if not supplier_id or method not in {"cash","checks"} or len(claims)!=len(claim_ids):return RedirectResponse(f"/supplier-payments?supplier_id={supplier_id}&message=اختر المطالبات وطريقة السداد",303)
+    total=sum(x.remaining for x in claims);treasury_id=int(f.get("treasury_id") or 0) or None
+    if method=="cash":
+        if not treasury_id or treasury_available_balance(db,treasury_id)<total:return RedirectResponse(f"/supplier-payments?supplier_id={supplier_id}&message=رصيد الخزينة غير كافٍ أو لم يتم اختيار خزينة",303)
+    journal=SupplierPaymentJournal(journal_no=next_number(db,SupplierPaymentJournal,"SPJ",d),journal_date=d,supplier_id=supplier_id,payment_method=method,treasury_id=treasury_id,total_amount=total);db.add(journal)
+    for claim in claims:journal.allocations.append(SupplierPaymentAllocation(claim_id=claim.id,amount=claim.remaining))
+    if method=="checks":
+        banks=f.getlist("bank_id");numbers=f.getlist("check_no");amounts=f.getlist("check_amount");dues=f.getlist("due_date");beneficiaries=f.getlist("beneficiary");descriptions=f.getlist("check_description");check_total=0;count=0
+        for i,bank_id in enumerate(banks[:10]):
+            amount=float(amounts[i] or 0) if i<len(amounts) else 0
+            if not bank_id and not (numbers[i].strip() if i<len(numbers) else ""):continue
+            if not bank_id or not numbers[i].strip() or amount<=0 or not parse_date(dues[i] if i<len(dues) else ""):return RedirectResponse(f"/supplier-payments?supplier_id={supplier_id}&message=أكمل بيانات جميع الشيكات",303)
+            journal.checks.append(IssuedCheck(supplier_id=supplier_id,bank_id=int(bank_id),check_no=numbers[i].strip(),amount=amount,due_date=parse_date(dues[i]),beneficiary=(beneficiaries[i].strip() if i<len(beneficiaries) else "") or db.get(Supplier,supplier_id).name,description=descriptions[i].strip() if i<len(descriptions) else ""));check_total+=amount;count+=1
+        if not count or abs(check_total-total)>.01:return RedirectResponse(f"/supplier-payments?supplier_id={supplier_id}&message=إجمالي الشيكات يجب أن يساوي إجمالي المطالبات",303)
+    try:db.commit()
+    except IntegrityError:db.rollback();return RedirectResponse(f"/supplier-payments?supplier_id={supplier_id}&message=رقم شيك مكرر لنفس البنك",303)
+    return RedirectResponse("/supplier-payments?message=تم حفظ اليومية وإرسالها للمراجعة والترحيل",303)
+
+@app.post("/supplier-payments/{journal_id}/post")
+def post_supplier_payment(journal_id:int,db:Session=Depends(get_db)):
+    journal=db.query(SupplierPaymentJournal).options(joinedload(SupplierPaymentJournal.allocations).joinedload(SupplierPaymentAllocation.claim),joinedload(SupplierPaymentJournal.checks)).filter(SupplierPaymentJournal.id==journal_id).first()
+    if not journal:raise HTTPException(404,"اليومية غير موجودة")
+    if journal.status=="posted":return RedirectResponse("/review?type=supplier_payments",303)
+    if journal.payment_method=="cash" and treasury_available_balance(db,journal.treasury_id)<journal.total_amount:return RedirectResponse("/review?type=supplier_payments&message=تعذر الترحيل: رصيد الخزينة غير كافٍ",303)
+    for allocation in journal.allocations:
+        allocation.claim.paid_amount=min(allocation.claim.total_amount,allocation.claim.paid_amount+allocation.amount);allocation.claim.status="closed";allocation.claim.closed_at=datetime.utcnow()
+    for check in journal.checks:check.status="issued";check.posted_at=datetime.utcnow()
+    journal.status="posted";journal.posted_at=datetime.utcnow();db.commit();return RedirectResponse("/review?type=supplier_payments&message=تم ترحيل يومية السداد",303)
+
+@app.get("/general-checks",response_class=HTMLResponse)
+def general_checks(request:Request,db:Session=Depends(get_db)):
+    return render(request,"checks/general.html","تحرير شيكات عامة","general_checks",accounts=db.query(OtherAccountItem).filter(OtherAccountItem.is_active.is_(True)).order_by(OtherAccountItem.name).all(),banks=db.query(Bank).filter(Bank.is_active.is_(True)).order_by(Bank.name).all(),today=date.today().strftime("%d/%m/%Y"),message=request.query_params.get("message",""))
+
+@app.post("/general-checks/save")
+async def save_general_checks(request:Request,db:Session=Depends(get_db)):
+    f=await request.form();account_id=int(f.get("account_id") or 0);d=parse_date(f.get("journal_date"),date.today());banks=f.getlist("bank_id");numbers=f.getlist("check_no");amounts=f.getlist("check_amount");dues=f.getlist("due_date");beneficiaries=f.getlist("beneficiary");descriptions=f.getlist("check_description")
+    if not db.get(OtherAccountItem,account_id):return RedirectResponse("/general-checks?message=اختر الحساب",303)
+    journal=GeneralCheckJournal(journal_no=next_number(db,GeneralCheckJournal,"GCJ",d),journal_date=d,account_id=account_id);db.add(journal);count=0
+    for i,bank_id in enumerate(banks[:10]):
+        amount=float(amounts[i] or 0) if i<len(amounts) else 0
+        if not bank_id and not (numbers[i].strip() if i<len(numbers) else ""):continue
+        due=parse_date(dues[i] if i<len(dues) else "")
+        if not bank_id or not numbers[i].strip() or amount<=0 or not due or not beneficiaries[i].strip():return RedirectResponse("/general-checks?message=أكمل بيانات جميع الشيكات",303)
+        journal.checks.append(IssuedCheck(general_account_id=account_id,bank_id=int(bank_id),check_no=numbers[i].strip(),amount=amount,due_date=due,beneficiary=beneficiaries[i].strip(),description=descriptions[i].strip() if i<len(descriptions) else ""));count+=1
+    if not count:return RedirectResponse("/general-checks?message=أدخل شيكاً واحداً على الأقل",303)
+    try:db.commit()
+    except IntegrityError:db.rollback();return RedirectResponse("/general-checks?message=رقم شيك مكرر لنفس البنك",303)
+    return RedirectResponse("/general-checks?message=تم حفظ يومية الشيكات وإرسالها للمراجعة",303)
+
+@app.post("/general-checks/{journal_id}/post")
+def post_general_checks(journal_id:int,db:Session=Depends(get_db)):
+    journal=db.query(GeneralCheckJournal).options(joinedload(GeneralCheckJournal.checks)).filter(GeneralCheckJournal.id==journal_id).first()
+    if not journal:raise HTTPException(404,"اليومية غير موجودة")
+    if journal.status!="posted":
+        journal.status="posted";journal.posted_at=datetime.utcnow()
+        for check in journal.checks:check.status="issued";check.posted_at=datetime.utcnow()
+        db.commit()
+    return RedirectResponse("/review?type=general_checks&message=تم ترحيل الشيكات المحررة",303)
+
+@app.get("/checks-calendar",response_class=HTMLResponse)
+def checks_calendar(request:Request,year:Optional[int]=None,month:Optional[int]=None,selected_date:Optional[str]=None,db:Session=Depends(get_db)):
+    today=date.today();year=year or today.year;month=month or today.month
+    if month<1 or month>12:month=today.month
+    first=date(year,month,1);last=date(year,month,calendar.monthrange(year,month)[1]);checks=db.query(IssuedCheck).options(joinedload(IssuedCheck.bank)).filter(IssuedCheck.status.in_(["issued","cleared"]),IssuedCheck.due_date>=first,IssuedCheck.due_date<=last).order_by(IssuedCheck.due_date,IssuedCheck.check_no).all();by_day={}
+    for check in checks:by_day.setdefault(check.due_date.day,[]).append(check)
+    weeks=calendar.Calendar(firstweekday=5).monthdatescalendar(year,month);selected=parse_date(selected_date);day_checks=[x for x in checks if selected and x.due_date==selected]
+    prev=(first-timedelta(days=1));nxt=(last+timedelta(days=1))
+    return render(request,"checks/calendar.html","أجندة الشيكات","checks_calendar",year=year,month=month,weeks=weeks,by_day=by_day,selected=selected,day_checks=day_checks,prev=prev,next=nxt,today=today)
+
+@app.get("/notifications/checks/read")
+def read_check_notification(key:str,db:Session=Depends(get_db)):
+    if key and not db.query(NotificationRead).filter(NotificationRead.notification_key==key).first():db.add(NotificationRead(notification_key=key));db.commit()
+    return RedirectResponse("/checks-calendar",303)
+
+SUPPLIER_REPORT_TABS={"claims":"تقرير مطالبات الموردين","cash":"تقرير المدفوعات النقدية","issued":"تقرير الشيكات المحررة","due":"تقرير الشيكات المستحقة","cleared":"تقرير الشيكات المصروفة","supplier_statement":"كشف حساب مورد شامل","bank":"كشف حركة بنك","treasury":"كشف حركة خزينة"}
+
+def supplier_report_data(db:Session,tab:str,supplier_id=None,bank_id=None,treasury_id=None,date_from=None,date_to=None):
+    start=parse_date(date_from);end=parse_date(date_to);rows=[]
+    if tab=="claims":
+        q=db.query(SupplierClaim).options(joinedload(SupplierClaim.supplier));q=q.filter(SupplierClaim.supplier_id==supplier_id) if supplier_id else q
+        if start:q=q.filter(SupplierClaim.claim_date>=start)
+        if end:q=q.filter(SupplierClaim.claim_date<=end)
+        columns=["رقم المطالبة","التاريخ","المورد","الإجمالي","المسدد","المتبقي","الحالة"]
+        rows=[[x.claim_no,x.claim_date.strftime("%d/%m/%Y"),x.supplier.name,x.total_amount,x.paid_amount,x.remaining,"مغلقة" if x.status=="closed" else "جاهزة للسداد"] for x in q.order_by(SupplierClaim.claim_date,SupplierClaim.id).all()]
+    elif tab=="cash":
+        q=db.query(SupplierPaymentJournal).options(joinedload(SupplierPaymentJournal.supplier),joinedload(SupplierPaymentJournal.treasury)).filter(SupplierPaymentJournal.payment_method=="cash");q=q.filter(SupplierPaymentJournal.supplier_id==supplier_id) if supplier_id else q
+        if treasury_id:q=q.filter(SupplierPaymentJournal.treasury_id==treasury_id)
+        if start:q=q.filter(SupplierPaymentJournal.journal_date>=start)
+        if end:q=q.filter(SupplierPaymentJournal.journal_date<=end)
+        columns=["اليومية","التاريخ","المورد","الخزينة","القيمة","الحالة"];rows=[[x.journal_no,x.journal_date.strftime("%d/%m/%Y"),x.supplier.name,x.treasury.name if x.treasury else "—",x.total_amount,"مرحل" if x.status=="posted" else "غير مرحل"] for x in q.order_by(SupplierPaymentJournal.journal_date,SupplierPaymentJournal.id).all()]
+    elif tab in {"issued","due","cleared"}:
+        q=db.query(IssuedCheck).options(joinedload(IssuedCheck.bank),joinedload(IssuedCheck.supplier),joinedload(IssuedCheck.general_account));q=q.filter(IssuedCheck.supplier_id==supplier_id) if supplier_id else q;q=q.filter(IssuedCheck.bank_id==bank_id) if bank_id else q
+        if tab=="issued":q=q.filter(IssuedCheck.status.in_(["issued","cleared"]))
+        elif tab=="due":q=q.filter(IssuedCheck.status=="issued",IssuedCheck.due_date>=date.today())
+        else:q=q.filter(IssuedCheck.status=="cleared")
+        if start:q=q.filter(IssuedCheck.due_date>=start)
+        if end:q=q.filter(IssuedCheck.due_date<=end)
+        columns=["رقم الشيك","تاريخ الاستحقاق","البنك","المستفيد","الجهة","القيمة","الحالة"];rows=[[x.check_no,x.due_date.strftime("%d/%m/%Y"),x.bank.name,x.beneficiary,x.supplier.name if x.supplier else x.general_account.name if x.general_account else "—",x.amount,"مصروف" if x.status=="cleared" else "محرر"] for x in q.order_by(IssuedCheck.due_date,IssuedCheck.check_no).all()]
+    elif tab=="supplier_statement":
+        columns=["التاريخ","المرجع","نوع الحركة","مدين","دائن","الرصيد"];balance=0;events=[]
+        if supplier_id:
+            supplier=db.get(Supplier,supplier_id);balance=(supplier.opening_credit or 0)-(supplier.opening_debit or 0) if supplier else 0
+            q=db.query(PurchaseLine).join(PurchaseJournal).options(joinedload(PurchaseLine.journal)).filter(PurchaseLine.supplier_id==supplier_id,PurchaseJournal.status=="posted")
+            for x in q.all():events.append((x.journal.journal_date,x.document_no,purchase_movement_name(x),max(-(x.account_effect or 0),0),max(x.account_effect or 0,0)))
+            p=db.query(SupplierPaymentJournal).filter(SupplierPaymentJournal.supplier_id==supplier_id,SupplierPaymentJournal.status=="posted")
+            for x in p.all():events.append((x.journal_date,x.journal_no,"سداد مورد",x.total_amount,0))
+            for d,ref,kind,debit,credit in sorted(events,key=lambda x:(x[0],x[1])):
+                if start and d<start:continue
+                if end and d>end:continue
+                balance+=credit-debit;rows.append([d.strftime("%d/%m/%Y"),ref,kind,debit,credit,balance])
+    elif tab=="bank":
+        columns=["التاريخ","البنك","رقم الشيك","المستفيد","القيمة","الحالة"];q=db.query(IssuedCheck).options(joinedload(IssuedCheck.bank)).filter(IssuedCheck.status.in_(["issued","cleared"]));q=q.filter(IssuedCheck.bank_id==bank_id) if bank_id else q
+        if start:q=q.filter(IssuedCheck.due_date>=start)
+        if end:q=q.filter(IssuedCheck.due_date<=end)
+        rows=[[x.due_date.strftime("%d/%m/%Y"),x.bank.name,x.check_no,x.beneficiary,x.amount,"مصروف" if x.status=="cleared" else "محرر - لم يخصم"] for x in q.order_by(IssuedCheck.due_date).all()]
+    else:
+        columns=["التاريخ","الخزينة","المرجع","نوع الحركة","وارد","صادر"]
+        treasuries=db.query(Treasury).filter(Treasury.id==treasury_id).all() if treasury_id else db.query(Treasury).all()
+        for treasury in treasuries:
+            for x in db.query(TreasuryDeposit).join(SalesJournal).filter(TreasuryDeposit.treasury_id==treasury.id,SalesJournal.status=="posted").all():rows.append([x.sales_journal.journal_date.strftime("%d/%m/%Y"),treasury.name,x.sales_journal.journal_no,"مبيعات",x.amount,0])
+            for x in db.query(ExpenseTreasuryPayment).join(ExpenseJournal).filter(ExpenseTreasuryPayment.treasury_id==treasury.id,ExpenseJournal.status=="posted").all():rows.append([x.journal.journal_date.strftime("%d/%m/%Y"),treasury.name,x.journal.journal_no,"مصروف",0,x.amount])
+            for x in db.query(SupplierPaymentJournal).filter(SupplierPaymentJournal.treasury_id==treasury.id,SupplierPaymentJournal.status=="posted",SupplierPaymentJournal.payment_method=="cash").all():rows.append([x.journal_date.strftime("%d/%m/%Y"),treasury.name,x.journal_no,"سداد مورد",0,x.total_amount])
+        rows.sort(key=lambda x:datetime.strptime(x[0],"%d/%m/%Y"))
+    return columns,rows
+
+@app.get("/supplier-reports",response_class=HTMLResponse)
+def supplier_reports(request:Request,tab:str="claims",supplier_id:Optional[int]=None,bank_id:Optional[int]=None,treasury_id:Optional[int]=None,date_from:Optional[str]=None,date_to:Optional[str]=None,db:Session=Depends(get_db)):
+    tab=tab if tab in SUPPLIER_REPORT_TABS else "claims";columns,rows=supplier_report_data(db,tab,supplier_id,bank_id,treasury_id,date_from,date_to)
+    return render(request,"reports/supplier_cycle.html",SUPPLIER_REPORT_TABS[tab],"supplier_reports",tab=tab,tabs=SUPPLIER_REPORT_TABS,columns=columns,rows=rows,suppliers=db.query(Supplier).order_by(Supplier.name).all(),banks=db.query(Bank).order_by(Bank.name).all(),treasuries=db.query(Treasury).order_by(Treasury.name).all(),filters={"supplier_id":supplier_id,"bank_id":bank_id,"treasury_id":treasury_id,"date_from":date_from or "","date_to":date_to or ""})
+
+@app.get("/supplier-reports/export")
+def export_supplier_reports(tab:str="claims",supplier_id:Optional[int]=None,bank_id:Optional[int]=None,treasury_id:Optional[int]=None,date_from:Optional[str]=None,date_to:Optional[str]=None,db:Session=Depends(get_db)):
+    tab=tab if tab in SUPPLIER_REPORT_TABS else "claims";columns,rows=supplier_report_data(db,tab,supplier_id,bank_id,treasury_id,date_from,date_to);return journal_export(SUPPLIER_REPORT_TABS[tab],columns,rows,f"AlFarouq_{tab}_Report.xlsx")
 
 @app.get("/health")
 def health():

@@ -80,3 +80,32 @@ class OtherAccountLine(Base):
     __tablename__='other_account_lines'
     id=Column(Integer,primary_key=True); journal_id=Column(Integer,ForeignKey('other_account_journals.id'),nullable=False,index=True); account_id=Column(Integer,ForeignKey('other_account_items.id'),nullable=False,index=True); amount=Column(Float,default=0,nullable=False); description=Column(String(500),default='')
     journal=relationship('OtherAccountJournal',back_populates='lines'); account=relationship('OtherAccountItem')
+class SupplierClaim(Base):
+    __tablename__='supplier_claims'
+    id=Column(Integer,primary_key=True); claim_no=Column(String(30),unique=True,nullable=False,index=True); claim_date=Column(Date,nullable=False,index=True); supplier_id=Column(Integer,ForeignKey('suppliers.id'),nullable=False,index=True); status=Column(String(20),default='ready',nullable=False,index=True); total_amount=Column(Float,default=0,nullable=False); paid_amount=Column(Float,default=0,nullable=False); created_at=Column(DateTime,default=datetime.utcnow,nullable=False); closed_at=Column(DateTime)
+    supplier=relationship('Supplier'); lines=relationship('SupplierClaimLine',back_populates='claim',cascade='all, delete-orphan'); allocations=relationship('SupplierPaymentAllocation',back_populates='claim')
+    remaining=property(lambda s:max((s.total_amount or 0)-(s.paid_amount or 0),0))
+class SupplierClaimLine(Base):
+    __tablename__='supplier_claim_lines'; __table_args__=(UniqueConstraint('purchase_line_id',name='uq_claim_purchase_line'),)
+    id=Column(Integer,primary_key=True); claim_id=Column(Integer,ForeignKey('supplier_claims.id'),nullable=False,index=True); purchase_line_id=Column(Integer,ForeignKey('purchase_lines.id'),nullable=False,index=True); amount=Column(Float,default=0,nullable=False)
+    claim=relationship('SupplierClaim',back_populates='lines'); purchase_line=relationship('PurchaseLine')
+class SupplierPaymentJournal(Base):
+    __tablename__='supplier_payment_journals'
+    id=Column(Integer,primary_key=True); journal_no=Column(String(30),unique=True,nullable=False,index=True); journal_date=Column(Date,nullable=False,index=True); supplier_id=Column(Integer,ForeignKey('suppliers.id'),nullable=False,index=True); payment_method=Column(String(20),nullable=False,index=True); treasury_id=Column(Integer,ForeignKey('treasuries.id'),index=True); total_amount=Column(Float,default=0,nullable=False); status=Column(String(20),default='draft',nullable=False,index=True); created_at=Column(DateTime,default=datetime.utcnow,nullable=False); posted_at=Column(DateTime)
+    supplier=relationship('Supplier'); treasury=relationship('Treasury'); allocations=relationship('SupplierPaymentAllocation',back_populates='journal',cascade='all, delete-orphan'); checks=relationship('IssuedCheck',back_populates='payment_journal',cascade='all, delete-orphan')
+    lines=property(lambda s:s.allocations); total_effect=property(lambda s:s.total_amount)
+class SupplierPaymentAllocation(Base):
+    __tablename__='supplier_payment_allocations'; __table_args__=(UniqueConstraint('journal_id','claim_id',name='uq_payment_claim'),)
+    id=Column(Integer,primary_key=True); journal_id=Column(Integer,ForeignKey('supplier_payment_journals.id'),nullable=False,index=True); claim_id=Column(Integer,ForeignKey('supplier_claims.id'),nullable=False,index=True); amount=Column(Float,default=0,nullable=False)
+    journal=relationship('SupplierPaymentJournal',back_populates='allocations'); claim=relationship('SupplierClaim',back_populates='allocations')
+class GeneralCheckJournal(Base):
+    __tablename__='general_check_journals'
+    id=Column(Integer,primary_key=True); journal_no=Column(String(30),unique=True,nullable=False,index=True); journal_date=Column(Date,nullable=False,index=True); account_id=Column(Integer,ForeignKey('other_account_items.id'),nullable=False,index=True); status=Column(String(20),default='draft',nullable=False,index=True); created_at=Column(DateTime,default=datetime.utcnow,nullable=False); posted_at=Column(DateTime)
+    account=relationship('OtherAccountItem'); checks=relationship('IssuedCheck',back_populates='general_journal',cascade='all, delete-orphan'); lines=property(lambda s:s.checks); total_amount=property(lambda s:sum(x.amount or 0 for x in s.checks)); total_effect=property(lambda s:s.total_amount)
+class IssuedCheck(Base):
+    __tablename__='issued_checks'; __table_args__=(UniqueConstraint('bank_id','check_no',name='uq_bank_check_no'),)
+    id=Column(Integer,primary_key=True); payment_journal_id=Column(Integer,ForeignKey('supplier_payment_journals.id'),index=True); general_journal_id=Column(Integer,ForeignKey('general_check_journals.id'),index=True); supplier_id=Column(Integer,ForeignKey('suppliers.id'),index=True); general_account_id=Column(Integer,ForeignKey('other_account_items.id'),index=True); bank_id=Column(Integer,ForeignKey('banks.id'),nullable=False,index=True); check_no=Column(String(80),nullable=False,index=True); amount=Column(Float,default=0,nullable=False); due_date=Column(Date,nullable=False,index=True); beneficiary=Column(String(180),nullable=False); description=Column(String(500),default=''); status=Column(String(20),default='draft',nullable=False,index=True); posted_at=Column(DateTime); cleared_at=Column(DateTime); notification_key=Column(String(100),default='')
+    payment_journal=relationship('SupplierPaymentJournal',back_populates='checks'); general_journal=relationship('GeneralCheckJournal',back_populates='checks'); supplier=relationship('Supplier'); general_account=relationship('OtherAccountItem'); bank=relationship('Bank')
+class NotificationRead(Base):
+    __tablename__='notification_reads'
+    id=Column(Integer,primary_key=True); notification_key=Column(String(120),unique=True,nullable=False,index=True); read_at=Column(DateTime,default=datetime.utcnow,nullable=False)

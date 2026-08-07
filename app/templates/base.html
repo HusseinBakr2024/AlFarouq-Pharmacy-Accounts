@@ -72,9 +72,24 @@
                 <span>يومية الحسابات الأخرى</span>
             </a>
 
-            <a href="#" class="menu-link" title="سداد الموردين">
+            <a href="/supplier-claims" class="menu-link {% if active_page == 'supplier_claims' %}active{% endif %}" title="مراجعة مطالبات المورد">
+                <i class="fa-solid fa-file-invoice-dollar"></i>
+                <span>مراجعة مطالبات المورد</span>
+            </a>
+
+            <a href="/supplier-payments" class="menu-link {% if active_page == 'supplier_payments' %}active{% endif %}" title="سداد الموردين">
                 <i class="fa-solid fa-hand-holding-dollar"></i>
                 <span>سداد الموردين</span>
+            </a>
+
+            <a href="/checks-calendar" class="menu-link {% if active_page == 'checks_calendar' %}active{% endif %}" title="أجندة الشيكات">
+                <i class="fa-solid fa-calendar-days"></i>
+                <span>أجندة الشيكات</span>
+            </a>
+
+            <a href="/general-checks" class="menu-link {% if active_page == 'general_checks' %}active{% endif %}" title="تحرير شيكات عامة">
+                <i class="fa-solid fa-money-check"></i>
+                <span>تحرير شيكات عامة</span>
             </a>
 
             <a href="/review" class="menu-link {% if active_page == 'review' %}active{% endif %}" title="مراجعة وترحيل">
@@ -88,6 +103,8 @@
             </a>
 
             <a href="/reports" class="menu-link {% if active_page == 'reports' %}active{% endif %}" title="مركز التقارير"><i class="fa-solid fa-chart-column"></i><span>التقارير</span></a>
+
+            <a href="/supplier-reports" class="menu-link {% if active_page == 'supplier_reports' %}active{% endif %}" title="تقارير المورد والشيكات"><i class="fa-solid fa-chart-pie"></i><span>تقارير المورد والشيكات</span></a>
 
         </div>
 
@@ -113,6 +130,8 @@
             <h1>{{ page_title }}</h1>
             <p>نظام إدارة الحسابات والرقابة المالية</p>
         </div>
+
+        {% if check_notification %}<a class="notification-bell active" href="/notifications/checks/read?key={{ check_notification.key }}" title="يوجد {{ check_notification.count }} شيكات تستحق خلال 4 أيام"><i class="fa-solid fa-bell"></i><b>{{ check_notification.count }}</b><span>يوجد {{ check_notification.count }} شيكات تستحق خلال 4 أيام</span></a>{% else %}<span class="notification-bell"><i class="fa-regular fa-bell"></i></span>{% endif %}
 
         <div class="topbar-user">
             <div class="user-icon">
