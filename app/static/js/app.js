@@ -101,6 +101,9 @@ function resetJournalForm(form) {
         journalIdInput.removeAttribute('value');
     }
     form.querySelectorAll('input[name="treasury_id"]').forEach((input) => input.remove());
+    document.querySelectorAll('select[name="treasury_picker"], #treasuryPicker, #expenseTreasuryPicker, #otherAccountTreasuryPicker').forEach((picker) => {
+        picker.value = "";
+    });
     const dateInput = form.querySelector('input[name="journal_date"]');
     if (dateInput) {
         const now = new Date();
@@ -170,8 +173,8 @@ function initJournalAjaxSave(form) {
                 showToast(data?.message || "حدث خطأ أثناء الحفظ", "error");
                 return;
             }
-            showToast(data.message || "تم حفظ اليومية بنجاح", "success");
             document.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
+            showToast(data.message || "تم حفظ اليومية بنجاح", "success");
             resetJournalForm(form);
         } catch (error) {
             showToast("فشل الاتصال بالسيرفر", "error");
@@ -280,7 +283,10 @@ function initSalesEntry(table) {
         document.getElementById("dialogNet").textContent = document.getElementById("metricNet")?.textContent || "0.00";
         dialog?.showModal();
     });
-    document.getElementById("closeTreasuryDialog")?.addEventListener("click", () => dialog?.close());
+    document.getElementById("closeTreasuryDialog")?.addEventListener("click", () => {
+        treasuryPicker.value = "";
+        dialog?.close();
+    });
     document.getElementById("confirmSalesSave")?.addEventListener("click", () => {
         if (!treasuryPicker?.value) {
             showToast('اختر الخزينة', 'error');
@@ -295,6 +301,7 @@ function initSalesEntry(table) {
             form.appendChild(hidden);
         }
         hidden.value = treasuryPicker.value;
+        dialog?.close();
         if (typeof form.requestSubmit === 'function') {
             form.requestSubmit();
         } else {

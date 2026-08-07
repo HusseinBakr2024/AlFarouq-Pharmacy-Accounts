@@ -840,7 +840,7 @@ body {
     align-items: center;
     justify-content: center;
     pointer-events: none;
-    z-index: 200000;
+    z-index: 1000000;
     padding: 12px;
 }
 

@@ -25,6 +25,36 @@ Base.metadata.create_all(bind=engine)
 
 # Keep existing SQLite installations compatible with additive master-data fields.
 with engine.begin() as connection:
+    if engine.dialect.name == "sqlite":
+        current_sql = connection.execute(text("SELECT sql FROM sqlite_master WHERE type='table' AND name='sales_journals'"))
+        row = current_sql.fetchone()
+        if row and row[0] and "uq_sales_branch_date" in row[0]:
+            connection.execute(text("DROP TABLE IF EXISTS sales_journals_new"))
+            connection.execute(text(
+                "CREATE TABLE sales_journals_new ("
+                "id INTEGER NOT NULL PRIMARY KEY, "
+                "journal_no VARCHAR(30) NOT NULL, "
+                "journal_date DATE NOT NULL, "
+                "branch_id INTEGER NOT NULL, "
+                "status VARCHAR(20) NOT NULL, "
+                "notes VARCHAR(500), "
+                "created_at DATETIME NOT NULL, "
+                "updated_at DATETIME NOT NULL, "
+                "posted_at DATETIME, "
+                "FOREIGN KEY(branch_id) REFERENCES branches(id)"
+                ")"
+            ))
+            connection.execute(text(
+                "INSERT INTO sales_journals_new (id, journal_no, journal_date, branch_id, status, notes, created_at, updated_at, posted_at) "
+                "SELECT id, journal_no, journal_date, branch_id, status, notes, created_at, updated_at, posted_at FROM sales_journals"
+            ))
+            connection.execute(text("DROP TABLE sales_journals"))
+            connection.execute(text("ALTER TABLE sales_journals_new RENAME TO sales_journals"))
+            connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_sales_journals_journal_no ON sales_journals (journal_no)"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_sales_journals_journal_date ON sales_journals (journal_date)"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_sales_journals_branch_id ON sales_journals (branch_id)"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_sales_journals_status ON sales_journals (status)"))
+
     columns={column["name"] for column in inspect(connection).get_columns("other_account_items")}
     if "effect_sign" not in columns:
         connection.execute(text("ALTER TABLE other_account_items ADD COLUMN effect_sign INTEGER NOT NULL DEFAULT 1"))
@@ -280,9 +310,6 @@ async def save_sales(request: Request, db: Session = Depends(get_db)):
         journal.notes = notes
         journal.lines.clear()
     else:
-        duplicate = db.query(SalesJournal).filter(SalesJournal.branch_id == branch_id, SalesJournal.journal_date == journal_date).first()
-        if duplicate:
-            return ajax_or_redirect(request, f"توجد يومية لهذا الفرع والتاريخ وتم فتحها للتعديل", f"/sales?edit_id={duplicate.id}&message=توجد يومية لهذا الفرع والتاريخ وتم فتحها للتعديل", success=False)
         journal = SalesJournal(journal_no=next_journal_no(db, journal_date), journal_date=journal_date, branch_id=branch_id, notes=notes)
         db.add(journal)
 
