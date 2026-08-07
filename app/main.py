@@ -40,6 +40,9 @@ with engine.begin() as connection:
         connection.execute(text("ALTER TABLE other_account_items ADD COLUMN opening_debit FLOAT NOT NULL DEFAULT 0"))
     if "opening_credit" not in account_columns:
         connection.execute(text("ALTER TABLE other_account_items ADD COLUMN opening_credit FLOAT NOT NULL DEFAULT 0"))
+    journal_columns={column["name"] for column in inspect(connection).get_columns("other_account_journals")}
+    if "treasury_id" not in journal_columns:
+        connection.execute(text("ALTER TABLE other_account_journals ADD COLUMN treasury_id INTEGER"))
 
 app = FastAPI(title="صيدليات الفاروق")
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
@@ -522,9 +525,14 @@ def expenses(request:Request,edit_id:Optional[int]=None,search:str="",status:str
 @app.post("/expenses/save")
 async def save_expenses(request:Request,db:Session=Depends(get_db)):
     f=await request.form(); jid=int(f.get("journal_id") or 0); d=parse_date(f.get("journal_date"),date.today()); kind=str(f.get("expense_type") or ""); branch_id=int(f.get("branch_id") or 0) or None
+    treasury_id=int(f.get("treasury_id") or 0)
     if kind not in {"operating","general"}:return ajax_or_redirect(request, "اختر نوع المصروف", "/expenses?message=اختر نوع المصروف", success=False)
     if kind=="operating" and not branch_id:return ajax_or_redirect(request, "الفرع مطلوب للمصروف التشغيلي", "/expenses?message=الفرع مطلوب للمصروف التشغيلي", success=False)
     if kind=="general":branch_id=None
+    if not treasury_id:return ajax_or_redirect(request, "اختر خزينة الصرف", "/expenses?message=اختر خزينة الصرف", success=False)
+    treasury=db.query(Treasury).filter(Treasury.id==treasury_id,Treasury.is_active.is_(True)).first()
+    if not treasury:return ajax_or_redirect(request, "اختر خزينة صحيحة", "/expenses?message=اختر خزينة صحيحة", success=False)
+    if kind=="operating" and treasury.branch_id!=branch_id:return ajax_or_redirect(request, "الخزينة المختارة لا تتبع الفرع", "/expenses?message=الخزينة المختارة لا تتبع الفرع", success=False)
     ids=f.getlist("expense_item_id"); amounts=f.getlist("amount"); notes=f.getlist("line_notes"); rows=[]
     for i,item_id in enumerate(ids):
         amount=float(amounts[i] or 0)
@@ -533,12 +541,16 @@ async def save_expenses(request:Request,db:Session=Depends(get_db)):
     valid={x.id for x in db.query(ExpenseItem).filter(ExpenseItem.id.in_([x[0] for x in rows]),ExpenseItem.expense_type==kind,ExpenseItem.is_active.is_(True)).all()}
     if len(valid)!=len(set(x[0] for x in rows)):return ajax_or_redirect(request, "يوجد حساب لا يطابق نوع المصروف", "/expenses?message=يوجد حساب لا يطابق نوع المصروف", success=False)
     if jid:
-        j=db.query(ExpenseJournal).options(joinedload(ExpenseJournal.lines)).filter(ExpenseJournal.id==jid).first()
+        j=db.query(ExpenseJournal).options(joinedload(ExpenseJournal.lines),joinedload(ExpenseJournal.treasury_payment)).filter(ExpenseJournal.id==jid).first()
         if not j or j.status=="posted":return ajax_or_redirect(request, "لا يمكن تعديل اليومية", "/expenses?message=لا يمكن تعديل اليومية", success=False)
         j.journal_date=d;j.expense_type=kind;j.branch_id=branch_id;j.lines.clear()
     else:j=ExpenseJournal(journal_no=next_number(db,ExpenseJournal,"EJ",d),journal_date=d,expense_type=kind,branch_id=branch_id);db.add(j)
     for item_id,amount,note in rows:j.lines.append(ExpenseLine(expense_item_id=item_id,amount=amount,notes=note))
-    db.commit();db.refresh(j);return ajax_or_redirect(request, "تم حفظ اليومية بنجاح", "/expenses?message=تم حفظ اليومية بنجاح")
+    db.commit();db.refresh(j)
+    if j.treasury_payment:j.treasury_payment.treasury_id=treasury.id;j.treasury_payment.amount=j.total_amount
+    else:j.treasury_payment=ExpenseTreasuryPayment(treasury_id=treasury.id,amount=j.total_amount)
+    db.commit();
+    return ajax_or_redirect(request, "تم حفظ اليومية بنجاح", "/expenses?message=تم حفظ اليومية بنجاح")
 
 @app.post("/expenses/{journal_id}/treasury")
 async def save_expense_treasury(journal_id:int,request:Request,db:Session=Depends(get_db)):
@@ -566,12 +578,15 @@ def other_accounts(request:Request,edit_id:Optional[int]=None,search:str="",stat
     if search:q=q.filter(OtherAccountJournal.journal_no.contains(search))
     if status in {"draft","posted"}:q=q.filter(OtherAccountJournal.status==status)
     if journal_date:q=q.filter(OtherAccountJournal.journal_date==parse_date(journal_date))
-    return render(request,"other_accounts/index.html","يومية الحسابات الأخرى","other_accounts",journal=journal,results=q.order_by(OtherAccountJournal.journal_date.desc(),OtherAccountJournal.id.desc()).limit(100).all(),accounts=db.query(OtherAccountItem).filter(OtherAccountItem.is_active.is_(True)).order_by(OtherAccountItem.name).all(),readonly=bool(journal and journal.status=="posted"),today=date.today().strftime("%d/%m/%Y"),search=search,selected_status=status,selected_date=journal_date or "",message=request.query_params.get("message",""))
+    return render(request,"other_accounts/index.html","يومية الحسابات الأخرى","other_accounts",journal=journal,results=q.order_by(OtherAccountJournal.journal_date.desc(),OtherAccountJournal.id.desc()).limit(100).all(),accounts=db.query(OtherAccountItem).filter(OtherAccountItem.is_active.is_(True)).order_by(OtherAccountItem.name).all(),treasuries=db.query(Treasury).filter(Treasury.is_active.is_(True)).order_by(Treasury.name).all(),readonly=bool(journal and journal.status=="posted"),today=date.today().strftime("%d/%m/%Y"),search=search,selected_status=status,selected_date=journal_date or "",message=request.query_params.get("message",""))
 
 @app.post("/other-accounts/save")
 async def save_other_accounts(request:Request,db:Session=Depends(get_db)):
-    f=await request.form();jid=int(f.get("journal_id") or 0);d=parse_date(f.get("journal_date"),date.today());kind=str(f.get("transaction_type") or "")
+    f=await request.form();jid=int(f.get("journal_id") or 0);d=parse_date(f.get("journal_date"),date.today());kind=str(f.get("transaction_type") or ""); treasury_id=int(f.get("treasury_id") or 0)
     if kind not in {"funding","withdrawal"}:return ajax_or_redirect(request, "اختر نوع الحركة", "/other-accounts?message=اختر نوع الحركة", success=False)
+    if not treasury_id:return ajax_or_redirect(request, "اختر الخزينة", "/other-accounts?message=اختر الخزينة", success=False)
+    treasury=db.query(Treasury).filter(Treasury.id==treasury_id,Treasury.is_active.is_(True)).first()
+    if not treasury:return ajax_or_redirect(request, "اختر خزينة صحيحة", "/other-accounts?message=اختر خزينة صحيحة", success=False)
     ids=f.getlist("account_id");amounts=f.getlist("amount");descriptions=f.getlist("description");rows=[]
     for i,account_id in enumerate(ids):
         amount=float(amounts[i] or 0)
@@ -582,8 +597,8 @@ async def save_other_accounts(request:Request,db:Session=Depends(get_db)):
     if jid:
         j=db.query(OtherAccountJournal).options(joinedload(OtherAccountJournal.lines)).filter(OtherAccountJournal.id==jid).first()
         if not j or j.status=="posted":return ajax_or_redirect(request, "لا يمكن تعديل اليومية", "/other-accounts?message=لا يمكن تعديل اليومية", success=False)
-        j.journal_date=d;j.transaction_type=kind;j.lines.clear()
-    else:j=OtherAccountJournal(journal_no=next_number(db,OtherAccountJournal,"OJ",d),journal_date=d,transaction_type=kind);db.add(j)
+        j.journal_date=d;j.transaction_type=kind;j.treasury_id=treasury_id;j.lines.clear()
+    else:j=OtherAccountJournal(journal_no=next_number(db,OtherAccountJournal,"OJ",d),journal_date=d,transaction_type=kind,treasury_id=treasury_id);db.add(j)
     for account_id,amount,description in rows:j.lines.append(OtherAccountLine(account_id=account_id,amount=amount,description=description))
     db.commit();return ajax_or_redirect(request, "تم حفظ اليومية بنجاح", "/other-accounts?message=تم حفظ اليومية بنجاح")
 

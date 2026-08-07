@@ -92,6 +92,7 @@
 <form
     method="post"
     action="/other-accounts/save"
+    id="otherAccountForm"
     data-readonly="{{ '1' if readonly else '0' }}"
     class="journal-entry-form"
 >
@@ -433,6 +434,49 @@
 
 </form>
 
+{% if not readonly %}
+<dialog class="erp-dialog" id="otherAccountTreasuryDialog">
+
+  <div class="dialog-title">
+
+    <i class="fa-solid fa-vault"></i>
+
+    <div>
+      <b id="otherAccountTreasuryTitle">اختر الخزينة</b>
+      <small>
+        سيتم إنشاء الحركة تلقائياً بقيمة اليومية
+      </small>
+    </div>
+
+  </div>
+
+  <div class="form-field">
+
+    <label>الخزينة</label>
+    <select id="otherAccountTreasuryPicker" name="treasury_id" required>
+      <option value="">اختر الخزينة</option>
+      {% for treasury in treasuries %}
+      <option value="{{ treasury.id }}">{{ treasury.code }} — {{ treasury.name }}</option>
+      {% endfor %}
+    </select>
+
+  </div>
+
+  <div class="dialog-total">
+    قيمة اليومية
+    <strong id="otherAccountTreasuryAmount">
+      {{ '%.2f'|format(journal.total_amount) if journal else '0.00' }}
+    </strong>
+  </div>
+
+  <div class="dialog-actions">
+    <button type="button" class="secondary-button" id="closeOtherAccountTreasury">إلغاء</button>
+    <button type="button" class="primary-button" id="confirmOtherAccountTreasury">تأكيد وإنشاء الحركة</button>
+  </div>
+
+</dialog>
+{% endif %}
+
 </section>
 
 </div>
@@ -446,9 +490,15 @@
 
 (() => {
 
-    const body =
-        document.querySelector('#otherTable tbody');
-
+    const body = document.querySelector('#otherTable tbody');
+    const form = document.querySelector('#otherAccountForm');
+    const dialog = document.querySelector('#otherAccountTreasuryDialog');
+    const treasuryPicker = document.querySelector('#otherAccountTreasuryPicker');
+    const treasuryAmount = document.querySelector('#otherAccountTreasuryAmount');
+    const treasuryTitle = document.querySelector('#otherAccountTreasuryTitle');
+    const rowMetric = document.getElementById('rowMetric');
+    const totalMetric = document.getElementById('totalMetric');
+    const typeSelect = form.querySelector('select[name="transaction_type"]');
 
     function calc(){
 
@@ -467,6 +517,7 @@
 
         rowMetric.textContent = n;
         totalMetric.textContent = t.toFixed(2);
+        treasuryAmount.textContent = t.toFixed(2);
 
     }
 
@@ -530,8 +581,7 @@
 
     function add(){
 
-        const r =
-            body.rows[0].cloneNode(true);
+        const r = body.rows[0].cloneNode(true);
 
         r.querySelectorAll('input,select').forEach(x => {
             x.value = '';
@@ -542,11 +592,58 @@
         bind(r);
 
         renumber();
-
         r.querySelector('select').focus();
 
     }
 
+
+    function updateOtherAccountTreasuryDialog(){
+        const total = +(totalMetric.textContent || 0);
+        treasuryAmount.textContent = total.toFixed(2);
+        const transactionType = typeSelect.value;
+        treasuryTitle.textContent = transactionType === 'funding' ? 'إلى أي خزينة يتم التمويل؟' : 'من أي خزينة يتم السحب؟';
+    }
+
+
+    form.addEventListener('submit', e => {
+        if (!form.querySelector('input[name="treasury_id"]')) {
+            e.preventDefault();
+            updateOtherAccountTreasuryDialog();
+            dialog.showModal();
+        }
+    });
+
+
+    document
+        .querySelector('#closeOtherAccountTreasury')
+        ?.addEventListener('click',
+            () => dialog.close()
+        );
+
+
+    document
+        .querySelector('#confirmOtherAccountTreasury')
+        ?.addEventListener('click',
+            () => {
+                if(!treasuryPicker.value){
+                    treasuryPicker.focus();
+                    return;
+                }
+                let hidden = form.querySelector('input[name="treasury_id"]');
+                if(!hidden){
+                    hidden = document.createElement('input');
+                    hidden.type = 'hidden';
+                    hidden.name = 'treasury_id';
+                    form.appendChild(hidden);
+                }
+                hidden.value = treasuryPicker.value;
+                dialog.close();
+                form.requestSubmit();
+            }
+        );
+
+
+    typeSelect.addEventListener('change', updateOtherAccountTreasuryDialog);
 
     body.querySelectorAll('tr').forEach(bind);
 

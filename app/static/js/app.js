@@ -140,12 +140,20 @@ function resetJournalForm(form) {
     if (firstField) firstField.focus();
 }
 
+function submitFormWithEvent(form) {
+    const event = new Event("submit", { cancelable: true, bubbles: true });
+    if (form.dispatchEvent(event)) {
+        form.submit();
+    }
+}
+
 function initJournalAjaxSave(form) {
     if (!form || form.dataset.ajaxInitialized === "1") return;
     form.dataset.ajaxInitialized = "1";
     form.addEventListener("submit", async function (event) {
-        event.preventDefault();
+        if (event.defaultPrevented) return;
         if (form.dataset.readonly === "1") return;
+        event.preventDefault();
         const action = form.action;
         const method = form.method || "POST";
         const payload = new FormData(form);
@@ -279,7 +287,7 @@ function initSalesEntry(table) {
         if (typeof form.requestSubmit === "function") {
             form.requestSubmit();
         } else {
-            form.submit();
+            submitFormWithEvent(form);
         }
     });
     branchSelect?.addEventListener("change", filterTreasuries); filterTreasuries();

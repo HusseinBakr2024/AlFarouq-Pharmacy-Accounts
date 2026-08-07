@@ -454,95 +454,82 @@
 </form>
 
 
-{% if journal and not readonly %}
+{% if not readonly %}
 
-<dialog
-  class="erp-dialog"
-  id="expenseTreasuryDialog"
->
+<dialog class="erp-dialog" id="expenseTreasuryDialog">
 
-<form
-  method="post"
-  action="/expenses/{{ journal.id }}/treasury"
->
+  <div class="dialog-title">
 
-<div class="dialog-title">
+    <i class="fa-solid fa-vault"></i>
 
-  <i class="fa-solid fa-vault"></i>
+    <div>
+      <b>يتم الصرف من أي خزينة؟</b>
 
-  <div>
-    <b>يتم الصرف من أي خزينة؟</b>
+      <small>
+        سيتم إنشاء حركة الخزينة تلقائياً بقيمة المصروف
+      </small>
+    </div>
 
-    <small>
-      سيتم إنشاء حركة الخزينة تلقائياً بقيمة المصروف
-    </small>
   </div>
 
-</div>
+  <div class="form-field">
 
+    <label>الخزينة</label>
 
-<div class="form-field">
+    <select
+      id="expenseTreasuryPicker"
+      name="treasury_id"
+      required
+    >
 
-<label>الخزينة</label>
+      <option value="">
+        اختر الخزينة
+      </option>
 
-<select
-  name="treasury_id"
-  required
->
+      {% for treasury in treasuries %}
 
-<option value="">
-  اختر الخزينة
-</option>
+      <option
+        value="{{ treasury.id }}"
+        data-branch="{{ treasury.branch_id }}"
+      >
+        {{ treasury.code }} — {{ treasury.name }}
+      </option>
 
-{% for treasury in treasuries %}
+      {% endfor %}
 
-<option
-  value="{{ treasury.id }}"
-  data-branch="{{ treasury.branch_id }}"
-  {% if journal.treasury_payment and journal.treasury_payment.treasury_id==treasury.id %}selected{% endif %}
-  {% if journal.expense_type=='operating' and treasury.branch_id!=journal.branch_id %}hidden{% endif %}
->
-  {{ treasury.code }} — {{ treasury.name }}
-</option>
+    </select>
 
-{% endfor %}
+  </div>
 
-</select>
+  <div class="dialog-total">
 
-</div>
+    قيمة الصرف
 
+    <strong id="expenseTreasuryAmount">
+      {{ '%.2f'|format(journal.total_amount) if journal else '0.00' }}
+    </strong>
 
-<div class="dialog-total">
+  </div>
 
-قيمة الصرف
+  <div class="dialog-actions">
 
-<strong>
-  {{ '%.2f'|format(journal.total_amount) }}
-</strong>
+    <button
+      type="button"
+      class="secondary-button"
+      id="closeExpenseTreasury"
+    >
+      إلغاء
+    </button>
 
-</div>
+    <button
+      type="button"
+      class="primary-button"
+      id="confirmExpenseTreasury"
+    >
+      تأكيد وإنشاء الحركة
+    </button>
 
-
-<div class="dialog-actions">
-
-<button
-  type="button"
-  class="secondary-button"
-  id="closeExpenseTreasury"
->
-  إلغاء
-</button>
-
-<button
-  type="submit"
-  class="primary-button"
->
-  تأكيد وإنشاء الحركة
-</button>
-
-</div>
-
-</form>
+  </div>
 
 </dialog>
 
@@ -565,6 +552,12 @@ const body = document.querySelector('#expenseTable tbody');
 const type = document.querySelector('#expenseType');
 const branch = document.querySelector('#expenseBranch');
 const branchBox = document.querySelector('#expenseBranchControl');
+const rowMetric = document.getElementById('rowMetric');
+const totalMetric = document.getElementById('totalMetric');
+const form = document.querySelector('#expenseForm');
+const dialog = document.querySelector('#expenseTreasuryDialog');
+const treasuryPicker = document.querySelector('#expenseTreasuryPicker');
+const treasuryAmount = document.querySelector('#expenseTreasuryAmount');
 
 
 function filter(){
@@ -619,6 +612,7 @@ function calc(){
 
   rowMetric.textContent = n;
   totalMetric.textContent = t.toFixed(2);
+  updateExpenseTreasuryAmount();
 
 }
 
@@ -709,14 +703,85 @@ function add(){
 }
 
 
-body
-  .querySelectorAll('tr')
-  .forEach(bind);
+function updateExpenseTreasuryAmount(){
+  const amount = +(totalMetric.textContent || 0);
+  treasuryAmount.textContent = amount.toFixed(2);
+}
+
+
+function updateExpenseTreasuryOptions(){
+  const operating = type.value === 'operating';
+  [...treasuryPicker.options].forEach(option => {
+    if(!option.value){
+      option.hidden = false;
+      return;
+    }
+    if(operating){
+      option.hidden = option.dataset.branch !== String(branch.value);
+    } else {
+      option.hidden = false;
+    }
+  });
+  if(treasuryPicker.selectedOptions[0]?.hidden){
+    treasuryPicker.value = '';
+  }
+}
+
+
+form.addEventListener('submit', e => {
+  if (!form.querySelector('input[name="treasury_id"]')) {
+    e.preventDefault();
+    updateExpenseTreasuryOptions();
+    updateExpenseTreasuryAmount();
+    dialog.showModal();
+  }
+});
+
+
+document
+  .querySelector('#closeExpenseTreasury')
+  ?.addEventListener(
+    'click',
+    () => dialog.close()
+  );
+
+
+document
+  .querySelector('#confirmExpenseTreasury')
+  ?.addEventListener(
+    'click',
+    () => {
+      if(!treasuryPicker.value){
+        treasuryPicker.focus();
+        return;
+      }
+      let hidden = form.querySelector('input[name="treasury_id"]');
+      if(!hidden){
+        hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.name = 'treasury_id';
+        form.appendChild(hidden);
+      }
+      hidden.value = treasuryPicker.value;
+      dialog.close();
+      form.requestSubmit();
+    }
+  );
 
 
 type.addEventListener(
   'change',
-  filter
+  () => {
+    filter();
+    updateExpenseTreasuryOptions();
+  }
+);
+
+branch.addEventListener(
+  'change',
+  () => {
+    updateExpenseTreasuryOptions();
+  }
 );
 
 
@@ -731,18 +796,6 @@ document
 filter();
 
 calc();
-
-
-const dialog =
-  document.querySelector('#expenseTreasuryDialog');
-
-
-document
-  .querySelector('#closeExpenseTreasury')
-  ?.addEventListener(
-    'click',
-    () => dialog.close()
-  );
 
 
 {% if choose_treasury %}

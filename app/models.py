@@ -74,8 +74,8 @@ class ExpenseTreasuryPayment(Base):
     journal=relationship('ExpenseJournal',back_populates='treasury_payment'); treasury=relationship('Treasury')
 class OtherAccountJournal(Base):
     __tablename__='other_account_journals'
-    id=Column(Integer,primary_key=True); journal_no=Column(String(30),unique=True,nullable=False,index=True); journal_date=Column(Date,nullable=False,index=True); transaction_type=Column(String(20),nullable=False,index=True); status=Column(String(20),default='draft',nullable=False,index=True); notes=Column(String(500),default=''); created_at=Column(DateTime,default=datetime.utcnow,nullable=False); updated_at=Column(DateTime,default=datetime.utcnow,onupdate=datetime.utcnow,nullable=False); posted_at=Column(DateTime)
-    lines=relationship('OtherAccountLine',back_populates='journal',cascade='all, delete-orphan',order_by='OtherAccountLine.id'); total_amount=property(lambda s:sum(x.amount or 0 for x in s.lines))
+    id=Column(Integer,primary_key=True); journal_no=Column(String(30),unique=True,nullable=False,index=True); journal_date=Column(Date,nullable=False,index=True); transaction_type=Column(String(20),nullable=False,index=True); treasury_id=Column(Integer,ForeignKey('treasuries.id'),nullable=True,index=True); status=Column(String(20),default='draft',nullable=False,index=True); notes=Column(String(500),default=''); created_at=Column(DateTime,default=datetime.utcnow,nullable=False); updated_at=Column(DateTime,default=datetime.utcnow,onupdate=datetime.utcnow,nullable=False); posted_at=Column(DateTime)
+    lines=relationship('OtherAccountLine',back_populates='journal',cascade='all, delete-orphan',order_by='OtherAccountLine.id'); treasury=relationship('Treasury'); total_amount=property(lambda s:sum(x.amount or 0 for x in s.lines))
 class OtherAccountLine(Base):
     __tablename__='other_account_lines'
     id=Column(Integer,primary_key=True); journal_id=Column(Integer,ForeignKey('other_account_journals.id'),nullable=False,index=True); account_id=Column(Integer,ForeignKey('other_account_items.id'),nullable=False,index=True); amount=Column(Float,default=0,nullable=False); description=Column(String(500),default='')
