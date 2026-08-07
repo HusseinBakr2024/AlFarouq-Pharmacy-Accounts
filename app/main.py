@@ -312,9 +312,10 @@ def post_sales(journal_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/reports",response_class=HTMLResponse)
-def unified_reports(request:Request,tab:str="sales",branch_id:Optional[int]=None,employee_id:Optional[int]=None,supplier_id:Optional[int]=None,date_from:Optional[str]=None,date_to:Optional[str]=None,status:str="all",journal_no:str="",document_no:str="",db:Session=Depends(get_db)):
+def unified_reports(request:Request,tab:str="sales",branch_id:Optional[int]=None,employee_id:Optional[int]=None,supplier_id:Optional[int]=None,expense_item_id:Optional[int]=None,account_id:Optional[int]=None,expense_type:str="",entry_type:str="all",date_from:Optional[str]=None,date_to:Optional[str]=None,status:str="all",journal_no:str="",document_no:str="",db:Session=Depends(get_db)):
     allowed={"sales","purchases","expenses","other_accounts","supplier_payments"}; tab=tab if tab in allowed else "sales"
-    filters={"branch_id":branch_id,"employee_id":employee_id,"supplier_id":supplier_id,"date_from":date_from or "","date_to":date_to or "","status":status,"journal_no":journal_no,"document_no":document_no}
+    filters={"branch_id":branch_id,"employee_id":employee_id,"supplier_id":supplier_id,"expense_item_id":expense_item_id,"account_id":account_id,"expense_type":expense_type,"entry_type":entry_type,"date_from":date_from or "","date_to":date_to or "","status":status,"journal_no":journal_no,"document_no":document_no}
+    account_summary=None
     if tab=="sales":
         q=db.query(SalesLine).join(SalesJournal).options(joinedload(SalesLine.employee),joinedload(SalesLine.journal).joinedload(SalesJournal.branch))
         if branch_id:q=q.filter(SalesJournal.branch_id==branch_id)
@@ -327,6 +328,7 @@ def unified_reports(request:Request,tab:str="sales",branch_id:Optional[int]=None
     elif tab=="purchases":
         q=db.query(PurchaseLine).join(PurchaseJournal).options(joinedload(PurchaseLine.supplier),joinedload(PurchaseLine.journal))
         if supplier_id:q=q.filter(PurchaseLine.supplier_id==supplier_id)
+        if entry_type in {"purchase","notice"}:q=q.filter(PurchaseJournal.entry_type==entry_type)
         if journal_no:q=q.filter(PurchaseJournal.journal_no.contains(journal_no))
         if document_no:q=q.filter(PurchaseLine.document_no.contains(document_no))
         if date_from:q=q.filter(PurchaseJournal.journal_date>=parse_date(date_from))
@@ -336,6 +338,8 @@ def unified_reports(request:Request,tab:str="sales",branch_id:Optional[int]=None
     elif tab=="expenses":
         q=db.query(ExpenseLine).join(ExpenseJournal).options(joinedload(ExpenseLine.expense_item),joinedload(ExpenseLine.journal).joinedload(ExpenseJournal.branch))
         if branch_id:q=q.filter(ExpenseJournal.branch_id==branch_id)
+        if expense_type in {"operating","general"}:q=q.filter(ExpenseJournal.expense_type==expense_type)
+        if expense_item_id:q=q.filter(ExpenseLine.expense_item_id==expense_item_id)
         if journal_no:q=q.filter(ExpenseJournal.journal_no.contains(journal_no))
         if date_from:q=q.filter(ExpenseJournal.journal_date>=parse_date(date_from))
         if date_to:q=q.filter(ExpenseJournal.journal_date<=parse_date(date_to))
@@ -343,13 +347,19 @@ def unified_reports(request:Request,tab:str="sales",branch_id:Optional[int]=None
         lines=q.order_by(ExpenseJournal.journal_date.desc(),ExpenseLine.id.desc()).all();totals=[("الحركات",len(lines)),("إجمالي المصروفات",sum(x.amount for x in lines))]
     elif tab=="other_accounts":
         q=db.query(OtherAccountLine).join(OtherAccountJournal).options(joinedload(OtherAccountLine.account),joinedload(OtherAccountLine.journal))
+        if account_id:q=q.filter(OtherAccountLine.account_id==account_id)
         if journal_no:q=q.filter(OtherAccountJournal.journal_no.contains(journal_no))
         if date_from:q=q.filter(OtherAccountJournal.journal_date>=parse_date(date_from))
         if date_to:q=q.filter(OtherAccountJournal.journal_date<=parse_date(date_to))
         if status in {"draft","posted"}:q=q.filter(OtherAccountJournal.status==status)
         lines=q.order_by(OtherAccountJournal.journal_date.desc(),OtherAccountLine.id.desc()).all();totals=[("الحركات",len(lines)),("إجمالي المبالغ",sum(x.amount for x in lines))]
+        if account_id:
+            account=db.get(OtherAccountItem,account_id)
+            if account:
+                opening=(account.opening_debit or 0)-(account.opening_credit or 0);funding=sum(x.amount for x in lines if x.journal.transaction_type=="funding");withdrawal=sum(x.amount for x in lines if x.journal.transaction_type=="withdrawal")
+                account_summary=[("الرصيد الافتتاحي",opening),("إجمالي التمويل",funding),("إجمالي السحب",withdrawal),("الرصيد الحالي",opening+funding-withdrawal)]
     else:lines=[]; totals=[("الحركات",0),("الإجمالي",0),("المرحل",0),("غير المرحل",0)]
-    return render(request,"reports/unified.html","التقارير","reports",tab=tab,lines=lines,totals=totals,filters=filters,branches=db.query(Branch).order_by(Branch.name).all(),employees=db.query(Employee).order_by(Employee.name).all(),suppliers=db.query(Supplier).order_by(Supplier.name).all())
+    return render(request,"reports/unified.html","التقارير","reports",tab=tab,lines=lines,totals=totals,account_summary=account_summary,filters=filters,branches=db.query(Branch).order_by(Branch.name).all(),employees=db.query(Employee).order_by(Employee.name).all(),suppliers=db.query(Supplier).order_by(Supplier.name).all(),expense_items=db.query(ExpenseItem).order_by(ExpenseItem.name).all(),accounts=db.query(OtherAccountItem).order_by(OtherAccountItem.name).all())
 
 @app.get("/reports/sales")
 def sales_report_redirect():
@@ -574,9 +584,11 @@ def journal_export(title:str,headers:list,rows:list,filename:str):
     out=BytesIO();wb.save(out);out.seek(0);return StreamingResponse(out,media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",headers={"Content-Disposition":f"attachment; filename={filename}"})
 
 @app.get("/reports/expenses/export")
-def export_expenses(branch_id:Optional[int]=None,status:str="all",journal_no:str="",date_from:Optional[str]=None,date_to:Optional[str]=None,db:Session=Depends(get_db)):
+def export_expenses(branch_id:Optional[int]=None,expense_type:str="",expense_item_id:Optional[int]=None,status:str="all",journal_no:str="",date_from:Optional[str]=None,date_to:Optional[str]=None,db:Session=Depends(get_db)):
     q=db.query(ExpenseLine).join(ExpenseJournal).options(joinedload(ExpenseLine.expense_item),joinedload(ExpenseLine.journal).joinedload(ExpenseJournal.branch))
     if branch_id:q=q.filter(ExpenseJournal.branch_id==branch_id)
+    if expense_type in {"operating","general"}:q=q.filter(ExpenseJournal.expense_type==expense_type)
+    if expense_item_id:q=q.filter(ExpenseLine.expense_item_id==expense_item_id)
     if status in {"draft","posted"}:q=q.filter(ExpenseJournal.status==status)
     if journal_no:q=q.filter(ExpenseJournal.journal_no.contains(journal_no))
     if date_from:q=q.filter(ExpenseJournal.journal_date>=parse_date(date_from))
@@ -585,8 +597,9 @@ def export_expenses(branch_id:Optional[int]=None,status:str="all",journal_no:str
     return journal_export("تقرير المصروفات",["اليومية","التاريخ","النوع","الفرع","الحساب","القيمة","ملاحظات","الحالة"],rows,"AlFarouq_Expenses_Report.xlsx")
 
 @app.get("/reports/other-accounts/export")
-def export_other_accounts(status:str="all",journal_no:str="",date_from:Optional[str]=None,date_to:Optional[str]=None,db:Session=Depends(get_db)):
+def export_other_accounts(account_id:Optional[int]=None,status:str="all",journal_no:str="",date_from:Optional[str]=None,date_to:Optional[str]=None,db:Session=Depends(get_db)):
     q=db.query(OtherAccountLine).join(OtherAccountJournal).options(joinedload(OtherAccountLine.account),joinedload(OtherAccountLine.journal))
+    if account_id:q=q.filter(OtherAccountLine.account_id==account_id)
     if status in {"draft","posted"}:q=q.filter(OtherAccountJournal.status==status)
     if journal_no:q=q.filter(OtherAccountJournal.journal_no.contains(journal_no))
     if date_from:q=q.filter(OtherAccountJournal.journal_date>=parse_date(date_from))

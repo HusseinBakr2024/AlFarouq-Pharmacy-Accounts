@@ -1624,6 +1624,33 @@ body.page-other_accounts .topbar{flex-basis:72px!important;height:72px!important
   .journal-fixed-actions .hint,.journal-fixed-actions .notes-field label{display:none}
 }
 
+/* Journal column distribution: compact sequence/name, generous narrative fields. */
+#salesEntryTable th:nth-child(1),#salesEntryTable td:nth-child(1){width:54px!important;min-width:54px!important;max-width:54px!important}
+#salesEntryTable th:nth-child(2),#salesEntryTable td:nth-child(2){width:24%!important}
+.purchase-workspace .purchase-detail-table .purchase-index-col{width:54px!important}
+.purchase-workspace .purchase-detail-table .purchase-supplier-col{width:15%!important}
+.purchase-workspace .purchase-detail-table .purchase-document-col{width:12%!important}
+.purchase-workspace .purchase-detail-table .purchase-description-col{width:35%!important}
+.journal-four-column-table .journal-index-col{width:54px!important}
+.journal-four-column-table .journal-account-col{width:23%!important}
+.journal-four-column-table .journal-amount-col{width:18%!important}
+.journal-four-column-table .journal-description-col{width:auto!important}
+
+/* Reports dashboard and fixed responsive workspace. */
+body.page-reports .page-content{overflow:hidden!important;padding:clamp(8px,1vw,14px)!important}
+body.page-reports .system-footer{flex-basis:38px!important;height:38px!important;min-height:38px!important;padding:6px 20px!important}
+body.page-reports .topbar{flex-basis:72px!important;height:72px!important;min-height:72px!important}
+.unified-report-page{height:100%!important;min-height:0!important;overflow:hidden!important;gap:8px!important}
+.report-dashboard{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:clamp(10px,1.5vw,22px);flex:0 0 auto;min-height:86px;padding:10px 15px;border-radius:14px;color:#fff;background:linear-gradient(120deg,#0f594c,#21816d);box-shadow:0 5px 18px rgba(15,89,76,.18)}
+.report-dashboard-title{white-space:nowrap}.report-dashboard-title h2{margin:0;font-size:19px}.report-dashboard-title p{margin:3px 0 0;color:#d9f0ea;font-size:11px}
+.report-dashboard-metrics{display:flex;align-items:stretch;gap:7px;min-width:0;overflow-x:auto}.report-dashboard-metrics>div{min-width:105px;padding:7px 10px;border:1px solid rgba(255,255,255,.22);border-radius:9px;background:rgba(255,255,255,.11)}.report-dashboard-metrics span{display:block;color:#d9f0ea;font-size:10px;white-space:nowrap}.report-dashboard-metrics strong{display:block;margin-top:2px;color:#fff;font-size:16px}
+.report-dashboard-actions{display:flex;align-items:center;gap:9px;white-space:nowrap}.posting-checks{display:flex;align-items:center;gap:6px}.posting-checks label{display:flex;align-items:center;gap:4px;padding:6px 7px;border:1px solid rgba(255,255,255,.25);border-radius:7px;background:rgba(255,255,255,.09);font-size:11px;cursor:pointer}.posting-checks input{accent-color:#f0b429}.dashboard-excel{display:inline-flex;align-items:center;gap:6px;padding:9px 12px;border-radius:8px;color:#155b3d!important;background:#fff!important;text-decoration:none;font-weight:700;font-size:12px}
+.report-auto-filters{display:flex;flex:0 0 auto;align-items:end;gap:7px;width:100%;padding:8px;border:1px solid #d9e6e2;border-radius:10px;background:#fff;overflow-x:auto;overflow-y:hidden;white-space:nowrap}.report-auto-filters>div{flex:1 1 0;min-width:145px}.report-auto-filters label{display:block;margin-bottom:3px;color:#526b65;font-size:10px;font-weight:700}.report-auto-filters input,.report-auto-filters select{width:100%;height:35px;padding:5px 8px;border:1px solid #cfddd9;border-radius:7px;background:#fff;font-family:inherit;font-size:12px}
+.unified-report-page .erp-tabs{flex:0 0 auto;padding:5px}.unified-report-page .erp-tabs a{padding:7px 13px}
+.unified-report-page .erp-report-table{flex:1 1 auto;min-height:0!important;overflow:auto!important;background:#fff}.unified-report-page .erp-report-table .data-table{min-width:900px}.unified-report-page .erp-report-table th,.unified-report-page .erp-report-table td{white-space:nowrap}
+@media(max-width:1100px){.report-dashboard{grid-template-columns:auto minmax(300px,1fr);}.report-dashboard-actions{grid-column:1/-1;justify-content:space-between}.report-dashboard{min-height:122px}}
+@media(max-width:700px){.report-dashboard{grid-template-columns:1fr;gap:6px;min-height:0;padding:8px}.report-dashboard-title p{display:none}.report-dashboard-actions{grid-column:auto;overflow-x:auto;justify-content:flex-start}.report-dashboard-metrics>div{min-width:92px}.posting-checks label{padding:5px}.report-auto-filters>div{min-width:125px}.unified-report-page .erp-tabs a{padding:6px 9px;font-size:11px}}
+
 /* Purchases keeps one stable header row and gives البيان the largest detail width. */
 .purchase-workspace .sales-head-controls{grid-template-columns:110px 145px minmax(145px,1fr) minmax(145px,1fr)}
 .purchase-workspace .journal-notice-type{visibility:hidden;pointer-events:none}
