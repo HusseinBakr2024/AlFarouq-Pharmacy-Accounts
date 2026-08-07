@@ -134,6 +134,8 @@ function resetJournalForm(form) {
         field.dispatchEvent(new Event("change", { bubbles: true }));
         field.dispatchEvent(new Event("input", { bubbles: true }));
     });
+    const newJournalLink = form.querySelector('a.secondary-button[href="/sales"], a.secondary-button[href="/purchases"], a.secondary-button[href="/expenses"], a.secondary-button[href="/other-accounts"]');
+    if (newJournalLink) newJournalLink.style.display = "none";
     const firstField = form.querySelector("select:not([disabled]), input:not([readonly]):not([disabled])");
     if (firstField) firstField.focus();
 }
@@ -273,7 +275,12 @@ function initSalesEntry(table) {
     document.getElementById("closeTreasuryDialog")?.addEventListener("click", () => dialog?.close());
     document.getElementById("confirmSalesSave")?.addEventListener("click", () => {
         if (!treasuryPicker?.value) { treasuryPicker?.reportValidity(); return; }
-        const hidden=document.createElement("input"); hidden.type="hidden"; hidden.name="treasury_id"; hidden.value=treasuryPicker.value; form.appendChild(hidden); form.submit();
+        const hidden=document.createElement("input"); hidden.type="hidden"; hidden.name="treasury_id"; hidden.value=treasuryPicker.value; form.appendChild(hidden);
+        if (typeof form.requestSubmit === "function") {
+            form.requestSubmit();
+        } else {
+            form.submit();
+        }
     });
     branchSelect?.addEventListener("change", filterTreasuries); filterTreasuries();
     filterEmployees(); updateMetrics();
