@@ -1722,32 +1722,34 @@ body.page-supplier_claims .page-content,body.page-supplier_payments .page-conten
 
 .supplier-claims-page{display:flex;flex-direction:column;min-height:0;overflow:hidden;gap:10px}
 .claims-command-bar{position:sticky;top:0;z-index:5;display:grid;grid-template-rows:auto auto;gap:10px;padding:12px 14px;background:linear-gradient(125deg,#153f38,#267666);border-radius:14px;box-shadow:0 6px 18px rgba(0,0,0,.08)}
-.claims-top-row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px}
-.claims-bottom-row{display:flex;justify-content:flex-end;align-items:center}
-.claims-filter-form{display:grid;grid-template-columns:minmax(220px,260px) minmax(140px,150px) minmax(140px,150px);gap:10px;align-items:center;width:auto}
+.claims-top-row{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:14px}
+.claims-bottom-row{display:flex;justify-content:flex-end;align-items:center;gap:10px;flex-wrap:wrap}
+.claims-filter-form{display:flex;gap:10px;align-items:center;justify-content:flex-end;width:auto}
 .claims-filter-item{display:flex;flex-direction:column;gap:4px;min-width:0}
 .claims-filter-item label{font-size:11px;color:rgba(255,255,255,.85);font-weight:700}
-.claims-filter-item input{height:36px;border:0;border-radius:10px;padding:0 10px;background:#f3f8f5;color:#1b3b33;font-size:13px}
-.claims-filter-item input[type=date]{width:100%}
-.supplier-filter-item{min-width:220px}
-.claims-kpi-panel{display:grid;grid-template-columns:repeat(4,minmax(100px,1fr));gap:10px;align-items:center;justify-items:start}
-.claims-kpi-card{padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.18);color:#fff;text-align:right;min-width:100px}
-.claims-kpi-card span{display:block;font-size:11px;color:rgba(255,255,255,.82);margin-bottom:4px}
-.claims-kpi-card strong{font-size:16px;line-height:1.2}
-.claims-action-panel{display:flex;align-items:center;justify-content:center;gap:12px}
-.claims-action-panel .primary-button{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:42px;padding:0 18px;border-radius:10px;background:#0cb27b;color:#fff;font-size:14px;font-weight:700}
+.claims-filter-item input{height:40px;border:0;border-radius:10px;padding:0 12px;background:#ffffff;color:#153f38;font-size:13px;box-shadow:inset 0 0 0 1px rgba(21,63,62,0.08)}
+.claims-filter-item input::placeholder{color:rgba(21,63,62,0.65)}
+.claims-filter-item input[type=date]{width:140px}
+.supplier-filter-item{min-width:260px;max-width:340px;flex:1 1 260px}
+.claims-filter-item.date-filter-item{width:140px;flex:0 0 140px}
+.claims-kpi-panel{display:grid;grid-template-columns:repeat(4,minmax(110px,1fr));gap:10px;align-items:center;justify-items:start}
+.claims-kpi-card{padding:10px 16px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:#fff;min-height:72px;display:flex;flex-direction:column;justify-content:center;gap:4px}
+.claims-kpi-card span{font-size:12px;color:rgba(255,255,255,.8);}
+.claims-kpi-card strong{font-size:21px;line-height:1;}
+.claims-action-panel{display:flex;align-items:center;justify-content:center;gap:12px;justify-self:center}
+.claims-action-panel .primary-button{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:44px;padding:0 22px;border-radius:12px;background:#0cb27b;color:#fff;font-size:14px;font-weight:700;box-shadow:0 10px 24px rgba(0,0,0,0.12)}
 .claims-action-panel .primary-button[disabled]{opacity:.55;cursor:not-allowed}
 .claims-action-summary b{font-size:14px}
 .claims-action-summary b{font-size:15px}
 .claims-table-form{display:flex;flex-direction:column;min-height:0;overflow:hidden}
-.claims-table-shell{flex:1 1 auto;min-height:0;overflow:auto;border-radius:12px;background:#fff;border:1px solid #d9e7e3;max-height:calc(100vh - 215px)}
-.claims-data-table{width:100%;border-collapse:collapse;min-width:1020px}
-.claims-data-table thead th{position:sticky;top:0;z-index:3;padding:10px 10px;background:#184f3f;color:#fff;text-align:left;font-size:12px;font-weight:700;line-height:1.3;white-space:nowrap}
-.claims-data-table tbody td{padding:10px 10px;border-bottom:1px solid #f1f4f2;color:#253f36;font-size:12px;vertical-align:middle}
+.claims-table-shell{flex:1 1 auto;min-height:0;overflow:auto;border-radius:12px;background:#fff;border:1px solid #d9e7e3;max-height:calc(100vh - 230px)}
+.claims-data-table{width:100%;border-collapse:collapse;min-width:960px}
+.claims-data-table thead th{position:sticky;top:0;z-index:3;padding:8px 10px;background:#184f3f;color:#fff;text-align:left;font-size:12px;font-weight:700;line-height:1.2;white-space:nowrap}
+.claims-data-table tbody td{padding:8px 10px;border-bottom:1px solid #f1f4f2;color:#253f36;font-size:12px;vertical-align:middle}
 .claims-data-table tbody tr:hover td{background:#f6fbf8}
-.claims-data-table .select-col{width:50px;text-align:center}
+.claims-data-table .select-col{width:46px;text-align:center}
 .claims-data-table .col-doc{width:110px}
-.claims-data-table .col-date{width:100px}
+.claims-data-table .col-date{width:90px}
 .claims-data-table .col-type{width:130px}
 .claims-data-table .col-pharm{width:130px;text-align:right}
 .claims-data-table .col-public{width:130px;text-align:right}
@@ -1756,6 +1758,8 @@ body.page-supplier_claims .page-content,body.page-supplier_payments .page-conten
 .claims-data-table input[type=checkbox]{width:16px;height:16px;margin:0}
 .claims-data-table .movement-badge{padding:4px 8px;font-size:11px}
 .empty-state{text-align:center;color:#6b7b75;padding:22px 0;display:block}
+body.page-supplier_claims .topbar-title{display:none}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 @media(max-width:1200px){.claims-command-bar{align-items:flex-start}.claims-filter-form{flex:1 1 100%}.claims-kpi-panel{flex:1 1 100%}.claims-action-panel{flex:1 1 100%;align-items:flex-start}}@media(max-width:850px){.cycle-dashboard{padding:8px}.cycle-dashboard p{display:none}.calendar-layout{grid-template-columns:minmax(0,1fr) 220px}.cycle-metrics span{min-width:100px}.payment-method-panel{overflow-x:auto}.cycle-fixed-actions span{display:none}}
 
 /* Purchases keeps one stable header row and gives البيان the largest detail width. */

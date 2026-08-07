@@ -27,18 +27,18 @@
   <div class="claims-bottom-row">
     <form method="get" class="claims-filter-form" id="claimsFilterForm">
       <div class="claims-filter-item supplier-filter-item">
-        <label for="supplierSearch">المورد</label>
-        <input id="supplierSearch" name="supplier_search" list="supplierOptions" type="text" value="{{ selected_supplier_label }}" placeholder="اختر المورد" autocomplete="off">
+        <label class="sr-only" for="supplierSearch">المورد</label>
+        <input id="supplierSearch" name="supplier_search" list="supplierOptions" type="text" value="{{ selected_supplier_label }}" placeholder="المورد" autocomplete="off">
         <datalist id="supplierOptions">{% for x in suppliers %}<option data-id="{{ x.id }}" value="{{ x.code }} — {{ x.name }}"></option>{% endfor %}</datalist>
         <input type="hidden" name="supplier_id" id="supplierIdInput" value="{{ supplier_id or '' }}">
       </div>
-      <div class="claims-filter-item">
-        <label for="dateFrom">من</label>
-        <input id="dateFrom" name="date_from" type="date" value="{{ date_from_value }}">
+      <div class="claims-filter-item date-filter-item">
+        <label class="sr-only" for="dateFrom">من</label>
+        <input id="dateFrom" name="date_from" type="date" value="{{ date_from_value }}" placeholder="من">
       </div>
-      <div class="claims-filter-item">
-        <label for="dateTo">إلى</label>
-        <input id="dateTo" name="date_to" type="date" value="{{ date_to_value }}">
+      <div class="claims-filter-item date-filter-item">
+        <label class="sr-only" for="dateTo">إلى</label>
+        <input id="dateTo" name="date_to" type="date" value="{{ date_to_value }}" placeholder="إلى">
       </div>
     </form>
   </div>
@@ -102,6 +102,7 @@
       filterForm.submit();
     }
   }
+  supplierSearch?.addEventListener('input', syncSupplierId);
   supplierSearch?.addEventListener('change', submitFilters);
   dateFrom?.addEventListener('change', submitFilters);
   dateTo?.addEventListener('change', submitFilters);
