@@ -1,6 +1,573 @@
-{% extends "base.html" %}{% block content %}
-<div class="workspace journal-layout-page other-accounts-workspace">{% if message %}<div class="alert-success">{{ message }}</div>{% endif %}<div class="journal-two-column">
-<aside class="journal-browser"><form method="get" action="/other-accounts" class="journal-browser-search"><label>بحث في اليوميات</label><input type="search" name="search" value="{{ search }}" placeholder="رقم اليومية"><select name="status"><option value="all">كل الحالات</option><option value="draft" {% if selected_status=='draft' %}selected{% endif %}>غير مرحلة</option><option value="posted" {% if selected_status=='posted' %}selected{% endif %}>مرحلة</option></select><input type="text" name="journal_date" value="{{ selected_date }}" placeholder="dd/MM/yyyy"><div class="browser-search-actions"><button class="primary-button"><i class="fa-solid fa-magnifying-glass"></i> بحث</button><a class="secondary-button" href="/other-accounts">مسح</a></div></form><div class="journal-browser-title"><b>اليوميات</b><span>{{ results|length }}</span></div><div class="journal-browser-list">{% for item in results %}<a href="/other-accounts?edit_id={{ item.id }}" class="journal-browser-item {% if journal and journal.id==item.id %}active{% endif %}"><div><b>{{ item.journal_no }}</b><small>{{ item.journal_date.strftime('%d/%m/%Y') }} — {{ 'تمويل' if item.transaction_type=='funding' else 'سحب أول' }}</small></div><em class="{{ item.status }}">{{ 'مرحلة' if item.status=='posted' else 'غير مرحلة' }}</em></a>{% else %}<div class="browser-empty">لا توجد يوميات.</div>{% endfor %}</div></aside>
-<section class="entry-card journal-entry-panel {% if readonly %}readonly-journal{% endif %}"><form method="post" action="/other-accounts/save" class="journal-entry-form"><input type="hidden" name="journal_id" value="{{ journal.id if journal else '' }}"><div class="title-metrics metrics-row"><span>الأسطر <b id="rowMetric">0</b></span><span>الإجمالي <b id="totalMetric">0.00</b></span></div><div class="journal-top-strip"><div class="sales-command-title"><h2>تسجيل يومية الحسابات الأخرى</h2><span class="journal-state {{ 'posted' if readonly else 'draft' }}">{{ 'مرحلة' if readonly else 'غير مرحلة' }}</span></div><div class="sales-head-controls"><div class="compact-control"><label>رقم اليومية</label><input value="{{ journal.journal_no if journal else 'تلقائي' }}" readonly></div><div class="compact-control"><label>التاريخ</label><input type="text" name="journal_date" required value="{{ journal.journal_date.strftime('%d/%m/%Y') if journal else today }}" {% if readonly %}disabled{% endif %}></div><div class="compact-control"><label>نوع الحركة</label><select name="transaction_type" required {% if readonly %}disabled{% endif %}><option value="withdrawal" {% if not journal or journal.transaction_type=='withdrawal' %}selected{% endif %}>سحب أول</option><option value="funding" {% if journal and journal.transaction_type=='funding' %}selected{% endif %}>تمويل</option></select></div></div></div>
-<div class="table-shell journal-scroll-area"><table class="data-table sales-entry-table journal-four-column-table" id="otherTable"><colgroup><col class="journal-index-col"><col class="journal-account-col"><col class="journal-amount-col"><col class="journal-description-col">{% if not readonly %}<col class="journal-action-col">{% endif %}</colgroup><thead><tr><th>م</th><th>اسم الحساب</th><th>المبلغ</th><th>البيان</th>{% if not readonly %}<th></th>{% endif %}</tr></thead><tbody>{% set rows=journal.lines if journal and journal.lines else [None] %}{% for line in rows %}<tr><td class="row-number">{{ loop.index }}</td><td><select name="account_id" required {% if readonly %}disabled{% endif %}><option value="">اختر الحساب</option>{% for x in accounts %}<option value="{{ x.id }}" {% if line and line.account_id==x.id %}selected{% endif %}>{{ x.code }} — {{ x.name }}</option>{% endfor %}</select></td><td><input class="money-input amount" type="number" name="amount" min="0.01" step="0.01" value="{{ '%.2f'|format(line.amount) if line else '' }}" {% if readonly %}readonly{% endif %}></td><td><input name="description" value="{{ line.description if line else '' }}" {% if readonly %}readonly{% endif %}></td>{% if not readonly %}<td><button type="button" class="icon-button danger row-delete"><i class="fa-solid fa-trash"></i></button></td>{% endif %}</tr>{% endfor %}</tbody></table></div><div class="journal-fixed-actions"><span class="hint"><i class="fa-solid fa-keyboard"></i> Enter يضيف سطراً جديداً</span><div class="action-group">{% if not readonly %}<button type="button" class="secondary-button" id="addRow"><i class="fa-solid fa-plus"></i> إضافة سطر</button><button type="submit" class="primary-button"><i class="fa-solid fa-floppy-disk"></i> حفظ اليومية</button>{% endif %}{% if journal %}<a class="secondary-button" href="/other-accounts">يومية جديدة</a>{% endif %}</div></div></form></section></div></div>
-{% if not readonly %}<script>(()=>{const body=document.querySelector('#otherTable tbody');function calc(){let n=0,t=0;body.querySelectorAll('tr').forEach(r=>{if(r.querySelector('select').value)n++;t+=+(r.querySelector('.amount').value||0)});rowMetric.textContent=n;totalMetric.textContent=t.toFixed(2)}function renumber(){body.querySelectorAll('tr').forEach((r,i)=>r.querySelector('.row-number').textContent=i+1)}function bind(r){r.querySelectorAll('input,select').forEach(x=>{x.addEventListener('input',calc);x.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();add()}})});r.querySelector('.row-delete')?.addEventListener('click',()=>{if(body.rows.length>1)r.remove();renumber();calc()})}function add(){const r=body.rows[0].cloneNode(true);r.querySelectorAll('input,select').forEach(x=>x.value='');body.appendChild(r);bind(r);renumber();r.querySelector('select').focus()}body.querySelectorAll('tr').forEach(bind);document.querySelector('#addRow').addEventListener('click',add);calc()})();</script>{% endif %}{% endblock %}
+{% extends "base.html" %}
+{% block content %}
+
+<div class="workspace journal-layout-page other-accounts-workspace">
+
+{% if message %}
+<div class="alert-success">{{ message }}</div>
+{% endif %}
+
+<div class="journal-two-column">
+
+<aside class="journal-browser">
+    <form method="get" action="/other-accounts" class="journal-browser-search">
+        <label>بحث في اليوميات</label>
+
+        <input
+            type="search"
+            name="search"
+            value="{{ search }}"
+            placeholder="رقم اليومية"
+        >
+
+        <select name="status">
+            <option value="all">كل الحالات</option>
+            <option value="draft" {% if selected_status=='draft' %}selected{% endif %}>
+                غير مرحلة
+            </option>
+            <option value="posted" {% if selected_status=='posted' %}selected{% endif %}>
+                مرحلة
+            </option>
+        </select>
+
+        <input
+            type="text"
+            name="journal_date"
+            value="{{ selected_date }}"
+            placeholder="dd/MM/yyyy"
+        >
+
+        <div class="browser-search-actions">
+            <button class="primary-button">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                بحث
+            </button>
+
+            <a class="secondary-button" href="/other-accounts">
+                مسح
+            </a>
+        </div>
+    </form>
+
+    <div class="journal-browser-title">
+        <b>اليوميات</b>
+        <span>{{ results|length }}</span>
+    </div>
+
+    <div class="journal-browser-list">
+
+        {% for item in results %}
+
+        <a
+            href="/other-accounts?edit_id={{ item.id }}"
+            class="journal-browser-item {% if journal and journal.id==item.id %}active{% endif %}"
+        >
+
+            <div>
+                <b>{{ item.journal_no }}</b>
+
+                <small>
+                    {{ item.journal_date.strftime('%d/%m/%Y') }}
+                    —
+                    {{ 'تمويل' if item.transaction_type=='funding' else 'سحب أول' }}
+                </small>
+            </div>
+
+            <em class="{{ item.status }}">
+                {{ 'مرحلة' if item.status=='posted' else 'غير مرحلة' }}
+            </em>
+
+        </a>
+
+        {% else %}
+
+        <div class="browser-empty">
+            لا توجد يوميات.
+        </div>
+
+        {% endfor %}
+
+    </div>
+</aside>
+
+
+<section class="entry-card journal-entry-panel {% if readonly %}readonly-journal{% endif %}">
+
+<form
+    method="post"
+    action="/other-accounts/save"
+    class="journal-entry-form"
+>
+
+<input
+    type="hidden"
+    name="journal_id"
+    value="{{ journal.id if journal else '' }}"
+>
+
+
+<div class="title-metrics metrics-row">
+
+    <span>
+        الأسطر
+        <b id="rowMetric">0</b>
+    </span>
+
+    <span>
+        الإجمالي
+        <b id="totalMetric">0.00</b>
+    </span>
+
+</div>
+
+
+<div class="journal-top-strip">
+
+    <div class="sales-command-title">
+
+        <h2>
+            تسجيل يومية الحسابات الأخرى
+        </h2>
+
+        <span class="journal-state {{ 'posted' if readonly else 'draft' }}">
+            {{ 'مرحلة' if readonly else 'غير مرحلة' }}
+        </span>
+
+    </div>
+
+
+    <div class="sales-head-controls">
+
+        <div class="compact-control">
+            <label>رقم اليومية</label>
+
+            <input
+                value="{{ journal.journal_no if journal else 'تلقائي' }}"
+                readonly
+            >
+        </div>
+
+
+        <div class="compact-control">
+            <label>التاريخ</label>
+
+            <input
+                type="text"
+                name="journal_date"
+                required
+                value="{{ journal.journal_date.strftime('%d/%m/%Y') if journal else today }}"
+                {% if readonly %}disabled{% endif %}
+            >
+        </div>
+
+
+        <div class="compact-control">
+            <label>نوع الحركة</label>
+
+            <select
+                name="transaction_type"
+                required
+                {% if readonly %}disabled{% endif %}
+            >
+
+                <option
+                    value="withdrawal"
+                    {% if not journal or journal.transaction_type=='withdrawal' %}selected{% endif %}
+                >
+                    سحب أول
+                </option>
+
+                <option
+                    value="funding"
+                    {% if journal and journal.transaction_type=='funding' %}selected{% endif %}
+                >
+                    تمويل
+                </option>
+
+            </select>
+        </div>
+
+    </div>
+
+</div>
+
+
+<div class="table-shell journal-scroll-area">
+
+<table
+    class="data-table journal-four-column-table"
+    id="otherTable"
+>
+
+<colgroup>
+
+    <col
+        style="
+            width:40px;
+            min-width:40px;
+            max-width:40px;
+        "
+    >
+
+    <col style="width:25%;">
+
+    <col style="width:16%;">
+
+    <col style="width:auto;">
+
+    {% if not readonly %}
+
+    <col
+        style="
+            width:48px;
+            min-width:48px;
+            max-width:48px;
+        "
+    >
+
+    {% endif %}
+
+</colgroup>
+
+
+<thead>
+
+<tr>
+
+    <th
+        style="
+            width:40px;
+            min-width:40px;
+            max-width:40px;
+        "
+    >
+        م
+    </th>
+
+    <th style="width:25%;">
+        اسم الحساب
+    </th>
+
+    <th style="width:16%;">
+        المبلغ
+    </th>
+
+    <th>
+        البيان
+    </th>
+
+    {% if not readonly %}
+
+    <th
+        style="
+            width:48px;
+            min-width:48px;
+            max-width:48px;
+        "
+    ></th>
+
+    {% endif %}
+
+</tr>
+
+</thead>
+
+
+<tbody>
+
+{% set rows = journal.lines if journal and journal.lines else [None] %}
+
+{% for line in rows %}
+
+<tr>
+
+    <td
+        class="row-number"
+        style="
+            width:40px;
+            min-width:40px;
+            max-width:40px;
+            padding-left:3px;
+            padding-right:3px;
+            text-align:center;
+        "
+    >
+        {{ loop.index }}
+    </td>
+
+
+    <td>
+
+        <select
+            name="account_id"
+            required
+            {% if readonly %}disabled{% endif %}
+        >
+
+            <option value="">
+                اختر الحساب
+            </option>
+
+            {% for x in accounts %}
+
+            <option
+                value="{{ x.id }}"
+                {% if line and line.account_id==x.id %}selected{% endif %}
+            >
+                {{ x.code }} — {{ x.name }}
+            </option>
+
+            {% endfor %}
+
+        </select>
+
+    </td>
+
+
+    <td>
+
+        <input
+            class="money-input amount"
+            type="number"
+            name="amount"
+            min="0.01"
+            step="0.01"
+            value="{{ '%.2f'|format(line.amount) if line else '' }}"
+            {% if readonly %}readonly{% endif %}
+        >
+
+    </td>
+
+
+    <td>
+
+        <input
+            name="description"
+            value="{{ line.description if line else '' }}"
+            style="width:100%;"
+            {% if readonly %}readonly{% endif %}
+        >
+
+    </td>
+
+
+    {% if not readonly %}
+
+    <td
+        style="
+            width:48px;
+            min-width:48px;
+            max-width:48px;
+            padding-left:3px;
+            padding-right:3px;
+            text-align:center;
+        "
+    >
+
+        <button
+            type="button"
+            class="icon-button danger row-delete"
+        >
+            <i class="fa-solid fa-trash"></i>
+        </button>
+
+    </td>
+
+    {% endif %}
+
+</tr>
+
+{% endfor %}
+
+</tbody>
+
+</table>
+
+</div>
+
+
+<div class="journal-fixed-actions">
+
+    <span class="hint">
+        <i class="fa-solid fa-keyboard"></i>
+        Enter يضيف سطراً جديداً
+    </span>
+
+
+    <div class="action-group">
+
+        {% if not readonly %}
+
+        <button
+            type="button"
+            class="secondary-button"
+            id="addRow"
+        >
+            <i class="fa-solid fa-plus"></i>
+            إضافة سطر
+        </button>
+
+
+        <button
+            type="submit"
+            class="primary-button"
+        >
+            <i class="fa-solid fa-floppy-disk"></i>
+            حفظ اليومية
+        </button>
+
+        {% endif %}
+
+
+        {% if journal %}
+
+        <a
+            class="secondary-button"
+            href="/other-accounts"
+        >
+            يومية جديدة
+        </a>
+
+        {% endif %}
+
+    </div>
+
+</div>
+
+</form>
+
+</section>
+
+</div>
+
+</div>
+
+
+{% if not readonly %}
+
+<script>
+
+(() => {
+
+    const body =
+        document.querySelector('#otherTable tbody');
+
+
+    function calc(){
+
+        let n = 0;
+        let t = 0;
+
+        body.querySelectorAll('tr').forEach(r => {
+
+            if(r.querySelector('select').value){
+                n++;
+            }
+
+            t += +(r.querySelector('.amount').value || 0);
+
+        });
+
+        rowMetric.textContent = n;
+        totalMetric.textContent = t.toFixed(2);
+
+    }
+
+
+    function renumber(){
+
+        body.querySelectorAll('tr').forEach((r,i) => {
+
+            r.querySelector('.row-number').textContent =
+                i + 1;
+
+        });
+
+    }
+
+
+    function bind(r){
+
+        r.querySelectorAll('input,select').forEach(x => {
+
+            x.addEventListener(
+                'input',
+                calc
+            );
+
+            x.addEventListener(
+                'keydown',
+                e => {
+
+                    if(e.key === 'Enter'){
+
+                        e.preventDefault();
+
+                        add();
+
+                    }
+
+                }
+            );
+
+        });
+
+
+        r.querySelector('.row-delete')
+            ?.addEventListener(
+                'click',
+                () => {
+
+                    if(body.rows.length > 1){
+                        r.remove();
+                    }
+
+                    renumber();
+                    calc();
+
+                }
+            );
+
+    }
+
+
+    function add(){
+
+        const r =
+            body.rows[0].cloneNode(true);
+
+        r.querySelectorAll('input,select').forEach(x => {
+            x.value = '';
+        });
+
+        body.appendChild(r);
+
+        bind(r);
+
+        renumber();
+
+        r.querySelector('select').focus();
+
+    }
+
+
+    body.querySelectorAll('tr').forEach(bind);
+
+
+    document
+        .querySelector('#addRow')
+        .addEventListener(
+            'click',
+            add
+        );
+
+
+    calc();
+
+})();
+
+</script>
+
+{% endif %}
+
+{% endblock %}

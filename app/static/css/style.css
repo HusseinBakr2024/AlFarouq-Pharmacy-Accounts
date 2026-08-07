@@ -1703,3 +1703,93 @@ body.page-supplier_claims .page-content,body.page-supplier_payments .page-conten
 .purchase-workspace.notice-mode .purchase-grid .notice-description-col input{min-width:180px}
 .purchase-workspace.notice-mode .purchase-grid th:last-child,
 .purchase-workspace.notice-mode .purchase-grid td:last-child{width:52px}
+
+/* ===== FINAL FIX: Expenses + Other Accounts table widths ===== */
+
+body.page-expenses .journal-four-column-table,
+body.page-other_accounts .journal-four-column-table {
+    width: 100% !important;
+    table-layout: fixed !important;
+}
+
+/* عمود م */
+body.page-expenses .journal-four-column-table .journal-index-col,
+body.page-other_accounts .journal-four-column-table .journal-index-col,
+body.page-expenses .journal-four-column-table th:first-child,
+body.page-expenses .journal-four-column-table td:first-child,
+body.page-other_accounts .journal-four-column-table th:first-child,
+body.page-other_accounts .journal-four-column-table td:first-child {
+    width: 40px !important;
+    min-width: 40px !important;
+    max-width: 40px !important;
+    padding-left: 3px !important;
+    padding-right: 3px !important;
+}
+
+/* اسم الحساب */
+body.page-expenses .journal-four-column-table .journal-account-col,
+body.page-other_accounts .journal-four-column-table .journal-account-col {
+    width: 25% !important;
+}
+
+/* القيمة */
+body.page-expenses .journal-four-column-table .journal-amount-col,
+body.page-other_accounts .journal-four-column-table .journal-amount-col {
+    width: 16% !important;
+}
+
+/* الملاحظات / البيان */
+body.page-expenses .journal-four-column-table .journal-description-col,
+body.page-other_accounts .journal-four-column-table .journal-description-col {
+    width: auto !important;
+}
+
+/* زر الحذف */
+body.page-expenses .journal-four-column-table .journal-action-col,
+body.page-other_accounts .journal-four-column-table .journal-action-col {
+    width: 48px !important;
+    min-width: 48px !important;
+    max-width: 48px !important;
+}
+
+/* FINAL DIRECT FIX - EXPENSE TABLE */
+
+#expenseTable {
+    width: 100% !important;
+    table-layout: fixed !important;
+}
+
+#expenseTable col:nth-child(1),
+#expenseTable th:nth-child(1),
+#expenseTable td:nth-child(1) {
+    width: 40px !important;
+    min-width: 40px !important;
+    max-width: 40px !important;
+}
+
+#expenseTable col:nth-child(2),
+#expenseTable th:nth-child(2),
+#expenseTable td:nth-child(2) {
+    width: 25% !important;
+}
+
+#expenseTable col:nth-child(3),
+#expenseTable th:nth-child(3),
+#expenseTable td:nth-child(3) {
+    width: 16% !important;
+}
+
+#expenseTable col:nth-child(4),
+#expenseTable th:nth-child(4),
+#expenseTable td:nth-child(4) {
+    width: auto !important;
+}
+
+#expenseTable col:nth-child(5),
+#expenseTable th:nth-child(5),
+#expenseTable td:nth-child(5) {
+    width: 48px !important;
+    min-width: 48px !important;
+    max-width: 48px !important;
+}
+
