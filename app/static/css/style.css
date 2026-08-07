@@ -1609,6 +1609,15 @@ body.page-other_accounts .topbar{flex-basis:72px!important;height:72px!important
 .journal-four-column-table .journal-action-col{width:44px}
 .journal-four-column-table input,.journal-four-column-table select{width:100%;min-width:0}
 
+body.page-expenses .journal-four-column-table .journal-index-col,
+body.page-other_accounts .journal-four-column-table .journal-index-col{width:50px!important}
+body.page-expenses .journal-four-column-table .journal-account-col,
+body.page-other_accounts .journal-four-column-table .journal-account-col{width:25%!important}
+body.page-expenses .journal-four-column-table .journal-amount-col,
+body.page-other_accounts .journal-four-column-table .journal-amount-col{width:20%!important}
+body.page-expenses .journal-four-column-table .journal-description-col,
+body.page-other_accounts .journal-four-column-table .journal-description-col{width:auto!important}
+
 @media(max-width:850px){
   body.page-sales .journal-layout-page,body.page-purchases .journal-layout-page,body.page-expenses .journal-layout-page,body.page-other_accounts .journal-layout-page{height:100%!important;overflow:hidden!important}
   .journal-two-column{grid-template-columns:185px minmax(0,1fr)!important;height:100%!important}
