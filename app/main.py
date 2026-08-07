@@ -689,6 +689,8 @@ def next_claim_no(db:Session,d:date)->str:
 @app.get("/supplier-claims",response_class=HTMLResponse)
 def supplier_claims(request:Request,supplier_id:Optional[int]=None,date_from:Optional[str]=None,date_to:Optional[str]=None,db:Session=Depends(get_db)):
     movements=[];balance=0;invoice_count=0;pharmacy_total=0;public_total=0;avg_discount=0;selected_supplier_label=""
+    date_from_date=parse_date(date_from) if date_from else None
+    date_to_date=parse_date(date_to) if date_to else None
     if supplier_id:
         supplier=db.get(Supplier,supplier_id)
         if supplier:
@@ -700,10 +702,10 @@ def supplier_claims(request:Request,supplier_id:Optional[int]=None,date_from:Opt
                 PurchaseJournal.status=="posted",
                 ~PurchaseLine.id.in_(claimed),
             )
-            if date_from:
-                q=q.filter(PurchaseJournal.journal_date>=parse_date(date_from))
-            if date_to:
-                q=q.filter(PurchaseJournal.journal_date<=parse_date(date_to))
+            if date_from_date:
+                q=q.filter(PurchaseJournal.journal_date>=date_from_date)
+            if date_to_date:
+                q=q.filter(PurchaseJournal.journal_date<=date_to_date)
             lines=q.order_by(PurchaseJournal.journal_date,PurchaseLine.document_no,PurchaseLine.id).all()
             for line in lines:
                 value=line.account_effect or 0
@@ -729,8 +731,8 @@ def supplier_claims(request:Request,supplier_id:Optional[int]=None,date_from:Opt
         suppliers=db.query(Supplier).filter(Supplier.is_active.is_(True)).order_by(Supplier.name).all(),
         supplier_id=supplier_id,
         selected_supplier_label=selected_supplier_label,
-        date_from=date_from or "",
-        date_to=date_to or "",
+        date_from_value=date_from_date.isoformat() if date_from_date else "",
+        date_to_value=date_to_date.isoformat() if date_to_date else "",
         invoice_count=invoice_count,
         pharmacy_total=pharmacy_total,
         public_total=public_total,

@@ -1,26 +1,21 @@
 {% extends "base.html" %}{% block content %}<div class="erp-cycle-page supplier-claims-page">
 {% if message %}<div class="message success">{{ message }}</div>{% endif %}
 <div class="claims-command-bar">
-  <div class="claims-bar-title">
-    <h2><i class="fa-solid fa-file-invoice-dollar"></i> مراجعة مطالبات المورد</h2>
-    <p>راجع الحركات غير المسددة بسرعة باستخدام المرشحات والمقاييس الفورية.</p>
-  </div>
   <form method="get" class="claims-filter-form" id="claimsFilterForm">
-    <div class="claims-filter-item">
+    <div class="claims-filter-item supplier-filter-item">
       <label for="supplierSearch">المورد</label>
-      <input id="supplierSearch" name="supplier_search" list="supplierOptions" type="text" value="{{ selected_supplier_label }}" placeholder="ابحث عن المورد" autocomplete="off">
+      <input id="supplierSearch" name="supplier_search" list="supplierOptions" type="text" value="{{ selected_supplier_label }}" placeholder="اختر المورد" autocomplete="off">
       <datalist id="supplierOptions">{% for x in suppliers %}<option data-id="{{ x.id }}" value="{{ x.code }} — {{ x.name }}"></option>{% endfor %}</datalist>
       <input type="hidden" name="supplier_id" id="supplierIdInput" value="{{ supplier_id or '' }}">
     </div>
     <div class="claims-filter-item">
-      <label for="dateFrom">من تاريخ</label>
-      <input id="dateFrom" name="date_from" type="text" inputmode="numeric" value="{{ date_from }}" placeholder="dd/MM/yyyy">
+      <label for="dateFrom">من</label>
+      <input id="dateFrom" name="date_from" type="date" value="{{ date_from_value }}">
     </div>
     <div class="claims-filter-item">
-      <label for="dateTo">إلى تاريخ</label>
-      <input id="dateTo" name="date_to" type="text" inputmode="numeric" value="{{ date_to }}" placeholder="dd/MM/yyyy">
+      <label for="dateTo">إلى</label>
+      <input id="dateTo" name="date_to" type="date" value="{{ date_to_value }}">
     </div>
-    <button type="submit" class="secondary-button">تحديث</button>
   </form>
   <div class="claims-kpi-panel">
     <div class="claims-kpi-card">
@@ -28,11 +23,11 @@
       <strong>{{ invoice_count }}</strong>
     </div>
     <div class="claims-kpi-card">
-      <span>إجمالي قيمة الصيدلية</span>
+      <span>قيمة الصيدلية</span>
       <strong>{{ pharmacy_total|round(2) }}</strong>
     </div>
     <div class="claims-kpi-card">
-      <span>إجمالي القيمة العامة</span>
+      <span>القيمة العامة</span>
       <strong>{{ public_total|round(2) }}</strong>
     </div>
     <div class="claims-kpi-card">
@@ -42,7 +37,7 @@
   </div>
   <div class="claims-action-panel">
     <button class="primary-button" form="claimForm" type="submit" {% if not supplier_id %}disabled{% endif %}><i class="fa-solid fa-circle-check"></i> اعتماد المطالبة</button>
-    <div class="claims-action-summary"><span>الفواتير المختارة <b id="selectedCount">0</b></span><span>إجمالي القيمة <b id="selectedTotal">0.00</b></span></div>
+    <div class="claims-action-summary"><span>العناصر <b id="selectedCount">0</b></span><span>القيمة <b id="selectedTotal">0.00</b></span></div>
   </div>
 </div>
 <form method="post" action="/supplier-claims/create" id="claimForm" class="claims-table-form">
@@ -80,7 +75,6 @@
       </tbody>
     </table>
   </div>
-  <div class="claims-table-note">الاعتماد ينشئ مطالبة جاهزة للسداد ولا يغلق الفواتير.</div>
 </form>
 </div>
 <script>
@@ -88,14 +82,26 @@
   const supplierSearch = document.getElementById('supplierSearch');
   const supplierIdInput = document.getElementById('supplierIdInput');
   const supplierOptions = Array.from(document.querySelectorAll('#supplierOptions option'));
+  const dateFrom = document.getElementById('dateFrom');
+  const dateTo = document.getElementById('dateTo');
+  const filterForm = document.getElementById('claimsFilterForm');
   const selectedCount = document.getElementById('selectedCount');
   const selectedTotal = document.getElementById('selectedTotal');
   const checks = Array.from(document.querySelectorAll('.claim-check'));
   function syncSupplierId() {
-    const match = supplierOptions.find(option => option.value === supplierSearch.value.trim());
+    const value = supplierSearch.value.trim();
+    const match = supplierOptions.find(option => option.value === value);
     supplierIdInput.value = match ? match.dataset.id : '';
   }
-  supplierSearch?.addEventListener('input', syncSupplierId);
+  function submitFilters() {
+    syncSupplierId();
+    if (filterForm) {
+      filterForm.submit();
+    }
+  }
+  supplierSearch?.addEventListener('change', submitFilters);
+  dateFrom?.addEventListener('change', submitFilters);
+  dateTo?.addEventListener('change', submitFilters);
   function calcSelection() {
     const selected = checks.filter(input => input.checked);
     selectedCount.textContent = selected.length;
