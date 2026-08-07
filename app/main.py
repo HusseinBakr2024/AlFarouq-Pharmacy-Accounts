@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.database import Base, SessionLocal, engine, get_db
 from app.models import (Branch, Employee, Supplier, SalesJournal, SalesLine, PurchaseJournal, PurchaseLine,
     User, Customer, Treasury, Bank, ExpenseItem, OtherAccountItem, OpeningStock, TreasuryDeposit,
-    ExpenseJournal, ExpenseLine, OtherAccountJournal, OtherAccountLine)
+    ExpenseJournal, ExpenseLine, ExpenseTreasuryPayment, OtherAccountJournal, OtherAccountLine)
 
 Base.metadata.create_all(bind=engine)
 
@@ -483,13 +483,13 @@ def next_number(db:Session, model, prefix:str, d:date)->str:
 
 @app.get("/expenses",response_class=HTMLResponse)
 def expenses(request:Request,edit_id:Optional[int]=None,search:str="",status:str="all",journal_date:Optional[str]=None,db:Session=Depends(get_db)):
-    journal=db.query(ExpenseJournal).options(joinedload(ExpenseJournal.branch),joinedload(ExpenseJournal.lines).joinedload(ExpenseLine.expense_item)).filter(ExpenseJournal.id==edit_id).first() if edit_id else None
+    journal=db.query(ExpenseJournal).options(joinedload(ExpenseJournal.branch),joinedload(ExpenseJournal.lines).joinedload(ExpenseLine.expense_item),joinedload(ExpenseJournal.treasury_payment)).filter(ExpenseJournal.id==edit_id).first() if edit_id else None
     if edit_id and not journal:raise HTTPException(404,"اليومية غير موجودة")
     q=db.query(ExpenseJournal).options(joinedload(ExpenseJournal.branch),joinedload(ExpenseJournal.lines))
     if search:q=q.filter(ExpenseJournal.journal_no.contains(search))
     if status in {"draft","posted"}:q=q.filter(ExpenseJournal.status==status)
     if journal_date:q=q.filter(ExpenseJournal.journal_date==parse_date(journal_date))
-    return render(request,"expenses/index.html","يومية مصروفات الفروع","expenses",journal=journal,results=q.order_by(ExpenseJournal.journal_date.desc(),ExpenseJournal.id.desc()).limit(100).all(),branches=db.query(Branch).filter(Branch.is_active.is_(True)).order_by(Branch.name).all(),expense_items=db.query(ExpenseItem).filter(ExpenseItem.is_active.is_(True)).order_by(ExpenseItem.name).all(),readonly=bool(journal and journal.status=="posted"),today=date.today().strftime("%d/%m/%Y"),search=search,selected_status=status,selected_date=journal_date or "",message=request.query_params.get("message",""))
+    return render(request,"expenses/index.html","يومية مصروفات الفروع","expenses",journal=journal,results=q.order_by(ExpenseJournal.journal_date.desc(),ExpenseJournal.id.desc()).limit(100).all(),branches=db.query(Branch).filter(Branch.is_active.is_(True)).order_by(Branch.name).all(),treasuries=db.query(Treasury).filter(Treasury.is_active.is_(True)).order_by(Treasury.name).all(),expense_items=db.query(ExpenseItem).filter(ExpenseItem.is_active.is_(True)).order_by(ExpenseItem.name).all(),readonly=bool(journal and journal.status=="posted"),choose_treasury=request.query_params.get("choose_treasury")=="1",today=date.today().strftime("%d/%m/%Y"),search=search,selected_status=status,selected_date=journal_date or "",message=request.query_params.get("message",""))
 
 @app.post("/expenses/save")
 async def save_expenses(request:Request,db:Session=Depends(get_db)):
@@ -510,7 +510,18 @@ async def save_expenses(request:Request,db:Session=Depends(get_db)):
         j.journal_date=d;j.expense_type=kind;j.branch_id=branch_id;j.lines.clear()
     else:j=ExpenseJournal(journal_no=next_number(db,ExpenseJournal,"EJ",d),journal_date=d,expense_type=kind,branch_id=branch_id);db.add(j)
     for item_id,amount,note in rows:j.lines.append(ExpenseLine(expense_item_id=item_id,amount=amount,notes=note))
-    db.commit();return RedirectResponse("/expenses?message=تم حفظ يومية المصروفات بنجاح",303)
+    db.commit();db.refresh(j);return RedirectResponse(f"/expenses?edit_id={j.id}&choose_treasury=1&message=تم حفظ اليومية، اختر خزينة الصرف",303)
+
+@app.post("/expenses/{journal_id}/treasury")
+async def save_expense_treasury(journal_id:int,request:Request,db:Session=Depends(get_db)):
+    f=await request.form();treasury_id=int(f.get("treasury_id") or 0)
+    j=db.query(ExpenseJournal).options(joinedload(ExpenseJournal.treasury_payment)).filter(ExpenseJournal.id==journal_id).first();treasury=db.query(Treasury).filter(Treasury.id==treasury_id,Treasury.is_active.is_(True)).first()
+    if not j or j.status=="posted":return RedirectResponse("/expenses?message=لا يمكن تعديل حركة خزينة هذه اليومية",303)
+    if not treasury:return RedirectResponse(f"/expenses?edit_id={journal_id}&choose_treasury=1&message=اختر خزينة صحيحة",303)
+    if j.expense_type=="operating" and treasury.branch_id!=j.branch_id:return RedirectResponse(f"/expenses?edit_id={journal_id}&choose_treasury=1&message=الخزينة المختارة لا تتبع الفرع",303)
+    if j.treasury_payment:j.treasury_payment.treasury_id=treasury.id;j.treasury_payment.amount=j.total_amount
+    else:j.treasury_payment=ExpenseTreasuryPayment(treasury_id=treasury.id,amount=j.total_amount)
+    db.commit();return RedirectResponse(f"/expenses?edit_id={journal_id}&message=تم إنشاء حركة الصرف من الخزينة بنجاح",303)
 
 @app.post("/expenses/{journal_id}/post")
 def post_expense(journal_id:int,db:Session=Depends(get_db)):
@@ -580,7 +591,7 @@ def export_other_accounts(status:str="all",journal_no:str="",date_from:Optional[
     if journal_no:q=q.filter(OtherAccountJournal.journal_no.contains(journal_no))
     if date_from:q=q.filter(OtherAccountJournal.journal_date>=parse_date(date_from))
     if date_to:q=q.filter(OtherAccountJournal.journal_date<=parse_date(date_to))
-    rows=[[x.journal.journal_no,x.journal.journal_date.strftime("%d/%m/%Y"),"تمويل" if x.journal.transaction_type=="funding" else "سحب",x.account.name,x.amount,x.description,"مرحلة" if x.journal.status=="posted" else "غير مرحلة"] for x in q.order_by(OtherAccountJournal.journal_date,OtherAccountLine.id).all()]
+    rows=[[x.journal.journal_no,x.journal.journal_date.strftime("%d/%m/%Y"),"تمويل" if x.journal.transaction_type=="funding" else "سحب أول",x.account.name,x.amount,x.description,"مرحلة" if x.journal.status=="posted" else "غير مرحلة"] for x in q.order_by(OtherAccountJournal.journal_date,OtherAccountLine.id).all()]
     return journal_export("تقرير الحسابات الأخرى",["اليومية","التاريخ","نوع الحركة","الحساب","المبلغ","البيان","الحالة"],rows,"AlFarouq_Other_Accounts_Report.xlsx")
 
 @app.get("/health")

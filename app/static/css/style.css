@@ -1552,6 +1552,78 @@ body.page-purchases .title-metrics span{
 .purchase-workspace.notice-mode .purchase-grid th:last-child,
 .purchase-workspace.notice-mode .purchase-grid td:last-child{width:52px}
 
+/* Unified fixed-height journal layout (sales is the visual reference). */
+body.page-sales .page-content,
+body.page-purchases .page-content,
+body.page-expenses .page-content,
+body.page-other_accounts .page-content{
+    overflow:hidden!important;
+    padding:clamp(7px,1vw,12px)!important;
+}
+body.page-sales .journal-layout-page,
+body.page-purchases .journal-layout-page,
+body.page-expenses .journal-layout-page,
+body.page-other_accounts .journal-layout-page,
+body.page-sales .journal-two-column,
+body.page-purchases .journal-two-column,
+body.page-expenses .journal-two-column,
+body.page-other_accounts .journal-two-column{
+    height:100%!important;max-height:100%!important;min-height:0!important;overflow:hidden!important;
+}
+.journal-two-column{grid-template-columns:clamp(205px,19vw,250px) minmax(0,1fr)!important;gap:clamp(6px,1vw,10px)!important}
+body.page-expenses .journal-entry-panel,
+body.page-other_accounts .journal-entry-panel,
+body.page-expenses .journal-entry-form,
+body.page-other_accounts .journal-entry-form{
+    height:100%!important;min-height:0!important;overflow:hidden!important;
+}
+body.page-expenses .journal-browser,
+body.page-other_accounts .journal-browser{height:100%!important;max-height:none!important;min-height:0!important}
+body.page-expenses .journal-browser-list,
+body.page-other_accounts .journal-browser-list{flex:1 1 auto!important;min-height:0!important;overflow-y:auto!important}
+body.page-expenses .journal-scroll-area,
+body.page-other_accounts .journal-scroll-area{flex:1 1 auto!important;min-height:0!important;overflow:auto!important}
+body.page-expenses .journal-fixed-actions,
+body.page-other_accounts .journal-fixed-actions{flex:0 0 auto!important;min-height:52px;position:relative;z-index:3}
+body.page-expenses .system-footer,
+body.page-other_accounts .system-footer{flex-basis:38px!important;height:38px!important;min-height:38px!important;padding:6px 20px!important}
+body.page-expenses .topbar,
+body.page-other_accounts .topbar{flex-basis:72px!important;height:72px!important;min-height:72px!important}
+
+/* Keep journal header controls in a single row, including the conditional branch. */
+.expense-workspace .sales-head-controls{grid-template-columns:110px 145px minmax(145px,1fr) minmax(145px,1fr);white-space:nowrap}
+.other-accounts-workspace .sales-head-controls{grid-template-columns:110px 145px minmax(160px,1fr);white-space:nowrap}
+.expense-workspace .journal-top-strip,.other-accounts-workspace .journal-top-strip{min-height:62px;overflow-x:auto;overflow-y:hidden}
+.expense-workspace .sales-head-controls,.other-accounts-workspace .sales-head-controls{min-width:max-content}
+
+/* Compact index and balanced detail widths. */
+#salesEntryTable{width:100%;min-width:760px;table-layout:fixed}
+#salesEntryTable th:nth-child(1),#salesEntryTable td:nth-child(1){width:30px!important;padding-left:3px;padding-right:3px}
+#salesEntryTable th:nth-child(2),#salesEntryTable td:nth-child(2){width:28%!important}
+#salesEntryTable th:nth-child(n+3):nth-child(-n+6),#salesEntryTable td:nth-child(n+3):nth-child(-n+6){width:auto!important}
+.journal-four-column-table{width:100%;min-width:620px;table-layout:fixed}
+.journal-four-column-table .journal-index-col{width:30px}
+.journal-four-column-table .journal-account-col{width:27%}
+.journal-four-column-table .journal-amount-col{width:20%}
+.journal-four-column-table .journal-description-col{width:auto}
+.journal-four-column-table .journal-action-col{width:44px}
+.journal-four-column-table input,.journal-four-column-table select{width:100%;min-width:0}
+
+@media(max-width:850px){
+  body.page-sales .journal-layout-page,body.page-purchases .journal-layout-page,body.page-expenses .journal-layout-page,body.page-other_accounts .journal-layout-page{height:100%!important;overflow:hidden!important}
+  .journal-two-column{grid-template-columns:185px minmax(0,1fr)!important;height:100%!important}
+  .journal-entry-panel{height:100%!important}
+  .journal-fixed-actions{align-items:center!important;flex-direction:row!important}
+  .journal-fixed-actions .action-group{flex-wrap:nowrap!important}
+}
+@media(max-width:600px){
+  .journal-two-column{grid-template-columns:145px minmax(0,1fr)!important}
+  .journal-browser-search{padding:7px;gap:5px}.journal-browser-search label{display:none}
+  .journal-entry-panel{padding:6px!important}.sales-command-title h2{font-size:14px}
+  .title-metrics span{padding:4px 6px!important;min-width:0!important}
+  .journal-fixed-actions .hint,.journal-fixed-actions .notes-field label{display:none}
+}
+
 /* Purchases keeps one stable header row and gives البيان the largest detail width. */
 .purchase-workspace .sales-head-controls{grid-template-columns:110px 145px minmax(145px,1fr) minmax(145px,1fr)}
 .purchase-workspace .journal-notice-type{visibility:hidden;pointer-events:none}

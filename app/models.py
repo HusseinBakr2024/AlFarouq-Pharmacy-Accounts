@@ -63,11 +63,15 @@ class PurchaseLine(Base):
 class ExpenseJournal(Base):
     __tablename__='expense_journals'
     id=Column(Integer,primary_key=True); journal_no=Column(String(30),unique=True,nullable=False,index=True); journal_date=Column(Date,nullable=False,index=True); expense_type=Column(String(20),nullable=False,index=True); branch_id=Column(Integer,ForeignKey('branches.id'),index=True); status=Column(String(20),default='draft',nullable=False,index=True); notes=Column(String(500),default=''); created_at=Column(DateTime,default=datetime.utcnow,nullable=False); updated_at=Column(DateTime,default=datetime.utcnow,onupdate=datetime.utcnow,nullable=False); posted_at=Column(DateTime)
-    branch=relationship('Branch'); lines=relationship('ExpenseLine',back_populates='journal',cascade='all, delete-orphan',order_by='ExpenseLine.id'); total_amount=property(lambda s:sum(x.amount or 0 for x in s.lines))
+    branch=relationship('Branch'); lines=relationship('ExpenseLine',back_populates='journal',cascade='all, delete-orphan',order_by='ExpenseLine.id'); treasury_payment=relationship('ExpenseTreasuryPayment',back_populates='journal',uselist=False,cascade='all, delete-orphan'); total_amount=property(lambda s:sum(x.amount or 0 for x in s.lines))
 class ExpenseLine(Base):
     __tablename__='expense_lines'
     id=Column(Integer,primary_key=True); journal_id=Column(Integer,ForeignKey('expense_journals.id'),nullable=False,index=True); expense_item_id=Column(Integer,ForeignKey('expense_items.id'),nullable=False,index=True); amount=Column(Float,default=0,nullable=False); notes=Column(String(500),default='')
     journal=relationship('ExpenseJournal',back_populates='lines'); expense_item=relationship('ExpenseItem')
+class ExpenseTreasuryPayment(Base):
+    __tablename__='expense_treasury_payments'
+    id=Column(Integer,primary_key=True); expense_journal_id=Column(Integer,ForeignKey('expense_journals.id'),unique=True,nullable=False); treasury_id=Column(Integer,ForeignKey('treasuries.id'),nullable=False); amount=Column(Float,default=0,nullable=False); created_at=Column(DateTime,default=datetime.utcnow,nullable=False)
+    journal=relationship('ExpenseJournal',back_populates='treasury_payment'); treasury=relationship('Treasury')
 class OtherAccountJournal(Base):
     __tablename__='other_account_journals'
     id=Column(Integer,primary_key=True); journal_no=Column(String(30),unique=True,nullable=False,index=True); journal_date=Column(Date,nullable=False,index=True); transaction_type=Column(String(20),nullable=False,index=True); status=Column(String(20),default='draft',nullable=False,index=True); notes=Column(String(500),default=''); created_at=Column(DateTime,default=datetime.utcnow,nullable=False); updated_at=Column(DateTime,default=datetime.utcnow,onupdate=datetime.utcnow,nullable=False); posted_at=Column(DateTime)
