@@ -1436,6 +1436,10 @@ body.sidebar-collapsed .menu-link { position: relative; }
 /* ===== Fixed journal workspace: page shell ثابت والتمرير داخل مناطق العمل فقط ===== */
 body.page-sales .page-content,
 body.page-purchases .page-content{
+    display:flex!important;
+    flex-direction:column!important;
+    height:calc(100vh - 72px - 38px)!important;
+    min-height:0!important;
     overflow:hidden!important;
     padding:10px 12px!important;
 }
@@ -1487,6 +1491,10 @@ body.page-purchases .journal-scroll-area{
 }
 body.page-sales .journal-fixed-actions,
 body.page-purchases .journal-fixed-actions{
+    position:sticky;
+    bottom:0;
+    z-index:2;
+    background:#fff;
     flex:0 0 auto;
     min-height:56px;
     padding-top:6px!important;
@@ -1557,6 +1565,10 @@ body.page-sales .page-content,
 body.page-purchases .page-content,
 body.page-expenses .page-content,
 body.page-other_accounts .page-content{
+    display:flex!important;
+    flex-direction:column!important;
+    height:calc(100vh - 72px - 38px)!important;
+    min-height:0!important;
     overflow:hidden!important;
     padding:clamp(7px,1vw,12px)!important;
 }
